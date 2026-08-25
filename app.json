@@ -1,15 +1,18 @@
 {
   "expo": {
-    "name": "agro-mobile",
+    "name": "ProduPlan Campo",
     "slug": "agro-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "produplan",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "br.ufal.smartagro.produplan"
     },
     "android": {
+      "package": "br.ufal.smartagro.produplan",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -20,6 +23,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": ["expo-secure-store", "expo-font"],
+    "extra": {
+      "apiPort": 8080
     }
   }
 }
