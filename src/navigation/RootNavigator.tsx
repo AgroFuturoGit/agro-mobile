@@ -47,7 +47,9 @@ function PlansNavigator() {
   // PRODUCER cai direto nos próprios planos (`/producers/me`); os outros
   // perfis precisam escolher o produtor antes.
   const initialRouteName =
-    user?.role === "PRODUCER" ? ("Plans" as const) : ("ProducerPicker" as const);
+    user?.role === "PRODUCER"
+      ? ("Plans" as const)
+      : ("ProducerPicker" as const);
 
   return (
     <PlansStack.Navigator initialRouteName={initialRouteName}>

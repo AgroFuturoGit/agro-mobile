@@ -46,9 +46,8 @@ const SyncContext = createContext<SyncContextValue | null>(null);
 export function SyncProvider({ children }: { children: ReactNode }) {
   const { status, sessionExpired } = useAuth();
 
-  const [connectivity, setConnectivity] = useState<Connectivity>(
-    getConnectivity(),
-  );
+  const [connectivity, setConnectivity] =
+    useState<Connectivity>(getConnectivity());
   const [entries, setEntries] = useState<OutboxEntry[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);

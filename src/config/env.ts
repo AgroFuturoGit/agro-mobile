@@ -4,8 +4,7 @@ import Constants from "expo-constants";
  * Porta padrão do agro-backend (Spring Boot). Pode ser sobrescrita em
  * `app.json` → `expo.extra.apiPort`.
  */
-const DEFAULT_API_PORT =
-  Number(Constants.expoConfig?.extra?.apiPort) || 8080;
+const DEFAULT_API_PORT = Number(Constants.expoConfig?.extra?.apiPort) || 8080;
 
 const FALLBACK_API_URL = `http://localhost:${DEFAULT_API_PORT}`;
 

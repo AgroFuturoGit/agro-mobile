@@ -42,7 +42,10 @@ import { ApiError } from "@/lib/api";
 import { CacheKeys } from "@/lib/cache";
 import { formatDate, formatNumber } from "@/lib/format";
 import { isLocalId } from "@/lib/outbox";
-import type { PlansStackParamList, RootStackParamList } from "@/navigation/types";
+import type {
+  PlansStackParamList,
+  RootStackParamList,
+} from "@/navigation/types";
 import { brand, spacing } from "@/theme";
 
 type Props = NativeStackScreenProps<PlansStackParamList, "PlanDetail">;
@@ -55,9 +58,8 @@ export function PlanDetailScreen({ route, navigation }: Props) {
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [toast, setToast] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<ProductionExecution | null>(
-    null,
-  );
+  const [pendingDelete, setPendingDelete] =
+    useState<ProductionExecution | null>(null);
   const [confirmPlanDelete, setConfirmPlanDelete] = useState(false);
 
   // O plano vem da lista já em cache: assim a tela abre igual online ou
@@ -209,9 +211,18 @@ export function PlanDetailScreen({ route, navigation }: Props) {
             <Divider />
 
             <View style={styles.infoGrid}>
-              <Info label="Área plantada" value={`${formatNumber(plan.plantedArea)} ha`} />
-              <Info label="Produção esperada" value={formatNumber(plan.expectedYield)} />
-              <Info label="Plantio previsto" value={formatDate(plan.plannedPlantingDate)} />
+              <Info
+                label="Área plantada"
+                value={`${formatNumber(plan.plantedArea)} ha`}
+              />
+              <Info
+                label="Produção esperada"
+                value={formatNumber(plan.expectedYield)}
+              />
+              <Info
+                label="Plantio previsto"
+                value={formatDate(plan.plannedPlantingDate)}
+              />
               <Info
                 label="Período da safra"
                 value={
@@ -366,8 +377,8 @@ export function PlanDetailScreen({ route, navigation }: Props) {
           <Dialog.Title>Excluir apontamento</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium">
-              O registro de {formatDate(pendingDelete?.harvestDate ?? null)} será
-              removido.
+              O registro de {formatDate(pendingDelete?.harvestDate ?? null)}{" "}
+              será removido.
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
@@ -390,7 +401,9 @@ export function PlanDetailScreen({ route, navigation }: Props) {
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setConfirmPlanDelete(false)}>Cancelar</Button>
+            <Button onPress={() => setConfirmPlanDelete(false)}>
+              Cancelar
+            </Button>
             <Button textColor={brand.danger} onPress={handleDeletePlan}>
               Excluir
             </Button>
@@ -525,7 +538,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
   },
-  noticeCard: { backgroundColor: brand.warningLight, borderColor: brand.warningLight },
+  noticeCard: {
+    backgroundColor: brand.warningLight,
+    borderColor: brand.warningLight,
+  },
   notice: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   noticeText: { color: brand.warning, flex: 1 },
   pendingChip: { backgroundColor: brand.warningLight },

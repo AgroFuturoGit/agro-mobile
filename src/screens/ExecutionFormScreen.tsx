@@ -16,7 +16,12 @@ import {
   updateProductionExecution,
 } from "@/domain/production";
 import { ApiError, parseFieldErrors } from "@/lib/api";
-import { formatDate, parseDateInput, parseDecimal, toIsoDate } from "@/lib/format";
+import {
+  formatDate,
+  parseDateInput,
+  parseDecimal,
+  toIsoDate,
+} from "@/lib/format";
 import type { RootStackParamList } from "@/navigation/types";
 import { brand, spacing } from "@/theme";
 
