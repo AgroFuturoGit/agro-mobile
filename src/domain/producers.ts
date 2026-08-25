@@ -1,4 +1,6 @@
+import type { Role } from "@/domain/auth";
 import { apiRequest } from "@/lib/api";
+import { CacheKeys } from "@/lib/cache";
 
 export type OrganizationType = "COOP" | "ASSOC";
 
@@ -100,6 +102,54 @@ export function fetchProducers(communityId?: string): Promise<Producer[]> {
   return apiRequest<ProducerApiResponse[]>(`/producers${query}`, {
     method: "GET",
   }).then((list) => list.map(mapProducer));
+}
+
+/**
+ * `GET /technicians/me/producers` — produtores atribuídos ao TECHNICIAN
+ * autenticado, via a relação N:N `TechnicalAssistance`. É a única rota de
+ * descoberta que o perfil Técnico tem: `GET /producers` exige ADMIN/MANAGER e
+ * `GET /producers/me` é exclusivo de PRODUCER.
+ */
+export function fetchAssignedProducers(): Promise<Producer[]> {
+  return apiRequest<ProducerApiResponse[]>("/technicians/me/producers", {
+    method: "GET",
+  }).then((list) => list.map(mapProducer));
+}
+
+export type ProducerDiscovery = {
+  /** Chave de cache — separada por papel, porque o conjunto visível difere. */
+  cacheKey: string;
+  fetch: () => Promise<Producer[]>;
+};
+
+/**
+ * Como cada papel descobre os produtores que pode ver.
+ *
+ * O backend não tem uma rota única: ADMIN e MANAGER listam por `/producers`,
+ * o TECHNICIAN só alcança os que lhe foram atribuídos. Concentrar a escolha
+ * aqui evita que a tela precise conhecer as regras de `@PreAuthorize`.
+ *
+ * PRODUCER não passa por aqui — cai direto nos próprios planos via
+ * `fetchMyProducer`. `null` significa "este papel não seleciona produtor".
+ */
+export function producerDiscoveryFor(
+  role: Role | null | undefined,
+): ProducerDiscovery | null {
+  switch (role) {
+    case "ADMIN":
+    case "MANAGER":
+      return {
+        cacheKey: CacheKeys.producers(),
+        fetch: () => fetchProducers(),
+      };
+    case "TECHNICIAN":
+      return {
+        cacheKey: CacheKeys.assignedProducers,
+        fetch: fetchAssignedProducers,
+      };
+    default:
+      return null;
+  }
 }
 
 export function producerDisplayName(producer: Producer): string {
