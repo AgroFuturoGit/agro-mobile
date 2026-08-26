@@ -56,7 +56,9 @@ export function parseDateInput(input: string): string | null {
   const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(trimmed);
   if (br) {
     const [, day, month, year] = br;
-    return isRealDate(`${year}-${month}-${day}`) ? `${year}-${month}-${day}` : null;
+    return isRealDate(`${year}-${month}-${day}`)
+      ? `${year}-${month}-${day}`
+      : null;
   }
 
   const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
@@ -78,12 +80,35 @@ function isRealDate(iso: string): boolean {
   );
 }
 
-/** Aceita vírgula decimal (teclado pt-BR) além do ponto. */
+/**
+ * Aceita vírgula decimal (teclado pt-BR) e também ponto decimal.
+ *
+ * O ponto é ambíguo em pt-BR: `1.234` é milhar, `12.5` é decimal. Remover todo
+ * ponto sem olhar o contexto transformava `12.5` em `125` — um erro de dez
+ * vezes num apontamento de colheita, gravado sem aviso nenhum.
+ *
+ * Regra aplicada:
+ * - havendo vírgula, ela é o decimal e os pontos são milhar (`1.234,56`);
+ * - sem vírgula, o ponto só é milhar quando separa grupos de exatamente três
+ *   dígitos (`1.234`, `1.234.567`); nos outros casos é decimal (`12.5`, `0.75`).
+ */
 export function parseDecimal(input: string): number | null {
-  const normalized = input.trim().replace(/\./g, "").replace(",", ".");
-  if (!normalized) return null;
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const normalized = trimmed.includes(",")
+    ? trimmed.replace(/\./g, "").replace(",", ".")
+    : looksLikeThousandGroups(trimmed)
+      ? trimmed.replace(/\./g, "")
+      : trimmed;
+
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** `1.234` e `1.234.567` são milhar; `12.5` e `1.2345` não. */
+function looksLikeThousandGroups(value: string): boolean {
+  return /^-?\d{1,3}(\.\d{3})+$/.test(value);
 }
 
 export function formatCpf(cpf: string | null | undefined): string {

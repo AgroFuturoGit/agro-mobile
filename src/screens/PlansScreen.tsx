@@ -30,7 +30,10 @@ import {
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { CacheKeys } from "@/lib/cache";
 import { formatDate, formatNumber } from "@/lib/format";
-import type { PlansStackParamList, RootStackParamList } from "@/navigation/types";
+import type {
+  PlansStackParamList,
+  RootStackParamList,
+} from "@/navigation/types";
 import { brand, spacing } from "@/theme";
 
 type Props = NativeStackScreenProps<PlansStackParamList, "Plans">;
@@ -63,7 +66,9 @@ export function PlansScreen({ route, navigation }: Props) {
 
   const plans = useMemo(
     () =>
-      producerId ? overlayPlans(producerId, plansQuery.data ?? [], entries) : [],
+      producerId
+        ? overlayPlans(producerId, plansQuery.data ?? [], entries)
+        : [],
     [producerId, plansQuery.data, entries],
   );
 
@@ -73,7 +78,8 @@ export function PlansScreen({ route, navigation }: Props) {
     });
   }, [navigation, producerName]);
 
-  const resolving = myProducerQuery.loading || (!producerId && !plansQuery.error);
+  const resolving =
+    myProducerQuery.loading || (!producerId && !plansQuery.error);
   const producerError = myProducerQuery.error;
 
   if (producerError && !producerId) {
@@ -133,7 +139,10 @@ export function PlansScreen({ route, navigation }: Props) {
         }
         ListFooterComponent={
           plans.length > 0 ? (
-            <CacheHint cachedAt={plansQuery.cachedAt} stale={plansQuery.stale} />
+            <CacheHint
+              cachedAt={plansQuery.cachedAt}
+              stale={plansQuery.stale}
+            />
           ) : null
         }
         renderItem={({ item }) => (
@@ -155,9 +164,7 @@ export function PlansScreen({ route, navigation }: Props) {
           icon="plus"
           label="Novo plano"
           style={styles.fab}
-          onPress={() =>
-            rootNavigation.navigate("PlanForm", { producerId })
-          }
+          onPress={() => rootNavigation.navigate("PlanForm", { producerId })}
         />
       ) : null}
     </View>
@@ -200,11 +207,11 @@ function PlanCard({
 
         <View style={styles.metrics}>
           <Metric label="Área" value={`${formatNumber(plan.plantedArea)} ha`} />
+          <Metric label="Esperado" value={formatNumber(plan.expectedYield)} />
           <Metric
-            label="Esperado"
-            value={formatNumber(plan.expectedYield)}
+            label="Plantio"
+            value={formatDate(plan.plannedPlantingDate)}
           />
-          <Metric label="Plantio" value={formatDate(plan.plannedPlantingDate)} />
         </View>
 
         {plan.harvest ? (

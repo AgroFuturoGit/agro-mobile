@@ -13,12 +13,11 @@ import {
 } from "@/components/StateViews";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  fetchProducers,
   type Producer,
+  producerDiscoveryFor,
   producerDisplayName,
 } from "@/domain/producers";
 import { useCachedQuery } from "@/hooks/use-cached-query";
-import { CacheKeys } from "@/lib/cache";
 import type { PlansStackParamList } from "@/navigation/types";
 import { brand, spacing } from "@/theme";
 
@@ -28,14 +27,17 @@ export function ProducerPickerScreen({ navigation }: Props) {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
 
-  // `GET /producers` exige ADMIN ou MANAGER (ver `ProducerController`).
-  // Para TECHNICIAN a API não expõe nenhuma rota de descoberta de produtores,
-  // então nem vale disparar a requisição — mostramos o porquê.
-  const canList = user?.role === "ADMIN" || user?.role === "MANAGER";
+  // Cada papel tem uma rota de descoberta diferente (ADMIN/MANAGER listam
+  // todos, TECHNICIAN só os atribuídos). A escolha vive no domínio.
+  const discovery = useMemo(
+    () => producerDiscoveryFor(user?.role),
+    [user?.role],
+  );
 
   const query = useCachedQuery<Producer[]>(
-    canList ? CacheKeys.producers() : null,
-    fetchProducers,
+    discovery?.cacheKey ?? null,
+    // `key === null` desliga a query, então o fetcher nunca é chamado aqui.
+    discovery?.fetch ?? fetchNothing,
   );
 
   const producers = useMemo(() => {
@@ -60,18 +62,14 @@ export function ProducerPickerScreen({ navigation }: Props) {
     [navigation],
   );
 
-  if (!canList) {
+  if (!discovery) {
     return (
       <View style={styles.container}>
         <OfflineBanner />
         <EmptyState
           icon="account-search-outline"
           title="Seleção de produtor indisponível"
-          description={
-            user?.role === "TECHNICIAN"
-              ? "A API não expõe listagem de produtores para o perfil Técnico (GET /producers exige ADMIN ou MANAGER). Peça acesso a um desses perfis para consultar planos por aqui."
-              : "Seu perfil não tem permissão para listar produtores."
-          }
+          description="Seu perfil não tem permissão para listar produtores."
         />
       </View>
     );
@@ -124,7 +122,9 @@ export function ProducerPickerScreen({ navigation }: Props) {
             description={
               search
                 ? "Ajuste a busca e tente de novo."
-                : "Nenhum produtor cadastrado até agora."
+                : user?.role === "TECHNICIAN"
+                  ? "Nenhum produtor foi atribuído a você. A vinculação é feita pelo gerente ou administrador no sistema web."
+                  : "Nenhum produtor cadastrado até agora."
             }
           />
         }
@@ -155,6 +155,11 @@ export function ProducerPickerScreen({ navigation }: Props) {
       />
     </View>
   );
+}
+
+/** Placeholder para quando o papel não tem rota de descoberta. */
+function fetchNothing(): Promise<Producer[]> {
+  return Promise.resolve([]);
 }
 
 const styles = StyleSheet.create({

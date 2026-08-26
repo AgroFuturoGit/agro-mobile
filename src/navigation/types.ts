@@ -1,9 +1,6 @@
 import type { NavigatorScreenParams } from "@react-navigation/native";
 
-import type {
-  ProductionExecution,
-  ProductionPlan,
-} from "@/domain/production";
+import type { ProductionExecution, ProductionPlan } from "@/domain/production";
 
 export type AuthStackParamList = {
   Login: undefined;

@@ -19,11 +19,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useSync } from "@/contexts/SyncContext";
 import { ROLE_LABELS } from "@/domain/auth";
-import {
-  getApiBaseUrl,
-  getDefaultApiBaseUrl,
-  setApiBaseUrl,
-} from "@/lib/api";
+import { getApiBaseUrl, getDefaultApiBaseUrl, setApiBaseUrl } from "@/lib/api";
 import { formatCpf } from "@/lib/format";
 import { clearCache } from "@/lib/storage";
 import type { RootStackParamList } from "@/navigation/types";
@@ -109,7 +105,9 @@ export function ProfileScreen() {
           <List.Item
             title="CPF"
             description={formatCpf(user?.cpf)}
-            left={(props) => <List.Icon {...props} icon="card-account-details-outline" />}
+            left={(props) => (
+              <List.Icon {...props} icon="card-account-details-outline" />
+            )}
           />
           <Divider />
           <List.Item
@@ -236,7 +234,10 @@ const styles = StyleSheet.create({
   bold: { fontWeight: "600" },
   muted: { color: brand.muted },
   role: { color: brand.primary, fontWeight: "600", marginTop: 2 },
-  warningCard: { backgroundColor: brand.warningLight, borderColor: brand.warningLight },
+  warningCard: {
+    backgroundColor: brand.warningLight,
+    borderColor: brand.warningLight,
+  },
   warningContent: { gap: spacing.md },
   warningText: { color: brand.warning },
   signOut: { borderColor: brand.dangerLight },

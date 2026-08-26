@@ -11,16 +11,23 @@ import {
 
 import {
   type AuthUser,
+  fetchCurrentUser,
   isExpired,
   login as loginRequest,
   type LoginInput,
   readTokenExpiry,
 } from "@/domain/auth";
 import {
+  ApiError,
   initApiBaseUrl,
   setTokenProvider,
   setUnauthorizedHandler,
 } from "@/lib/api";
+import {
+  getConnectivity,
+  isProbablyOnline,
+  subscribeConnectivity,
+} from "@/lib/net";
 import { deleteToken, loadToken, saveToken } from "@/lib/secure";
 import {
   clearCache,
@@ -90,6 +97,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false;
     };
   }, []);
+
+  /**
+   * Confere a sessão contra a API (`GET /auth/me`).
+   *
+   * O usuário guardado no aparelho é uma foto do momento do login: um papel
+   * alterado pelo administrador só chegaria aqui no próximo login. Revalidar
+   * ao abrir o app e ao recuperar sinal mantém as permissões da tela em dia.
+   *
+   * Falha de rede não muda nada — o dado local continua sendo o melhor que
+   * existe. Só um 401 explícito derruba a sessão; o backend responde 500 para
+   * token expirado (ver Limitações no README), e 500 não é motivo para
+   * desautenticar ninguém.
+   */
+  const revalidate = useCallback(async () => {
+    if (tokenRef.current === null) return;
+    if (!isProbablyOnline(getConnectivity())) return;
+
+    try {
+      const fresh = await fetchCurrentUser();
+      setUser(fresh);
+      setSessionExpired(false);
+      await writeJson(StorageKeys.user, fresh);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setSessionExpired(true);
+      }
+    }
+  }, []);
+
+  // Ao entrar com sessão restaurada e ao voltar o sinal.
+  useEffect(() => {
+    if (status !== "signed-in" || sessionExpired) return;
+
+    void revalidate();
+
+    return subscribeConnectivity((connectivity) => {
+      if (isProbablyOnline(connectivity)) void revalidate();
+    });
+  }, [status, sessionExpired, revalidate]);
 
   const signIn = useCallback(async (input: LoginInput) => {
     const response = await loginRequest(input);

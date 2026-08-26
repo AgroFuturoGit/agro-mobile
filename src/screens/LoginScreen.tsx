@@ -8,13 +8,26 @@ import {
 } from "react-native";
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Button, HelperText, Text, TextInput } from "react-native-paper";
+import {
+  Button,
+  Dialog,
+  HelperText,
+  Portal,
+  Text,
+  TextInput,
+} from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useSync } from "@/contexts/SyncContext";
 import { loginSchema } from "@/domain/auth";
-import { ApiError, isOfflineError } from "@/lib/api";
+import {
+  ApiError,
+  getApiBaseUrl,
+  getDefaultApiBaseUrl,
+  isOfflineError,
+  setApiBaseUrl,
+} from "@/lib/api";
 import { brand, spacing } from "@/theme";
 
 type Props = {
@@ -37,6 +50,32 @@ export function LoginScreen({ mode = "initial", onSuccess, onCancel }: Props) {
     email?: string;
     password?: string;
   }>({});
+
+  // O endereço da API também é editável aqui, não só no Perfil.
+  //
+  // Num APK standalone o `hostUri` do Expo não existe, então a detecção
+  // automática cai no `localhost` — que no celular é o próprio aparelho. Sem
+  // este campo o usuário não conseguiria entrar nem chegar ao Perfil, que
+  // fica atrás do login: ficaria preso sem nenhuma saída pela interface.
+  const [serverDialog, setServerDialog] = useState(false);
+  const [serverUrl, setServerUrl] = useState(getApiBaseUrl());
+  const [currentUrl, setCurrentUrl] = useState(getApiBaseUrl());
+
+  async function handleSaveServer() {
+    const saved = await setApiBaseUrl(serverUrl);
+    setCurrentUrl(saved);
+    setServerUrl(saved);
+    setServerDialog(false);
+    setFormError(null);
+  }
+
+  async function handleResetServer() {
+    const saved = await setApiBaseUrl(null);
+    setCurrentUrl(saved);
+    setServerUrl(saved);
+    setServerDialog(false);
+    setFormError(null);
+  }
 
   async function handleSubmit() {
     setFormError(null);
@@ -196,8 +235,48 @@ export function LoginScreen({ mode = "initial", onSuccess, onCancel }: Props) {
               </Button>
             ) : null}
           </View>
+
+          <Button
+            mode="text"
+            icon="server-network"
+            compact
+            disabled={submitting}
+            onPress={() => {
+              setServerUrl(currentUrl);
+              setServerDialog(true);
+            }}
+            labelStyle={styles.serverLabel}
+          >
+            {currentUrl}
+          </Button>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Portal>
+        <Dialog visible={serverDialog} onDismiss={() => setServerDialog(false)}>
+          <Dialog.Title>Endereço do servidor</Dialog.Title>
+          <Dialog.Content style={styles.dialogContent}>
+            <TextInput
+              label="URL da API"
+              value={serverUrl}
+              onChangeText={setServerUrl}
+              mode="outlined"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              placeholder="http://192.168.0.10:8080"
+            />
+            <Text variant="bodySmall" style={styles.muted}>
+              Peça ao responsável o endereço do servidor da sua cooperativa.
+              Padrão detectado: {getDefaultApiBaseUrl()}
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={handleResetServer}>Restaurar padrão</Button>
+            <Button onPress={handleSaveServer}>Salvar</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -243,4 +322,6 @@ const styles = StyleSheet.create({
   form: { gap: spacing.md },
   submit: { marginTop: spacing.sm, borderRadius: 10 },
   submitContent: { paddingVertical: spacing.xs },
+  serverLabel: { fontSize: 12, color: brand.muted },
+  dialogContent: { gap: spacing.sm },
 });
