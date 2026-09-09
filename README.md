@@ -140,7 +140,28 @@ O tratamento de erro segue essa fronteira:
 | Sem rede               | Interrompe o lote inteiro — não há o que tentar em nenhum recurso                                                              |
 | 401 / 403              | Interrompe o lote inteiro; o item continua _pendente_, porque o problema é a credencial, não o dado                            |
 | 5xx ou erro inesperado | Bloqueia **só aquele recurso**, com espera exponencial (30 s → 30 min). Após 5 tentativas o item passa a exigir reenvio manual |
+| 409                    | Alteração concorrente: alguém editou o mesmo registro antes. Ver abaixo                                                        |
 | 4xx                    | O item é inválido (plano apagado, dado recusado): marca como _recusado_ e pula o resto daquele recurso, que dependia dele      |
+
+### Conflito: quando duas pessoas editam o mesmo registro
+
+Um 409 não é um erro do dado — é uma corrida perdida. Por isso ele tem estado
+próprio na fila (`conflict`, ao lado de `pending` e `failed`) e tratamento
+diferente de um 4xx comum: **o resto do recurso continua sendo despachado**,
+porque o plano existe e está mais novo, então um apontamento na fila
+provavelmente ainda se aplica.
+
+A versão do servidor vem no corpo do 409 (campo `current`) e substitui o dado
+local; a tela de Sincronização mostra o item com o selo **"Conflito"** e
+explica que a versão de quem editou antes já está em tela. Reenviar não é
+oferecido: o item carrega a versão antiga e seria recusado de novo — o caminho
+é descartar e refazer, se ainda fizer sentido.
+
+Para o servidor conseguir detectar a corrida, a edição envia em
+`baseUpdatedAt` a **versão que o usuário tinha em mãos ao abrir o formulário**,
+guardada no item da fila. Não serve o instante da edição: um registro feito
+offline chega ao servidor sempre com carimbo mais recente que o do banco, então
+venceria toda disputa e o conflito nunca apareceria.
 
 Quando um plano criado offline é finalmente aceito, a API devolve o id real e
 a fila **reescreve** o id provisório em tudo que ainda aponta para ele —

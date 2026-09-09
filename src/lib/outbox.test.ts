@@ -7,6 +7,7 @@ import {
   MAX_SERVER_ATTEMPTS,
   type OutboxEntry,
   retryEntry,
+  setConflictReconciler,
   streamKeyOf,
 } from "@/lib/outbox";
 
@@ -119,6 +120,7 @@ describe("flushOutbox", () => {
       outcome: "synced",
       sent: 2,
       failed: 0,
+      conflicted: 0,
       remaining: 0,
     });
     expect(getOutbox()).toHaveLength(0);
@@ -356,5 +358,111 @@ describe("backoff e teto de tentativas", () => {
 
     await flushOutbox();
     expect(mockedRequest).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("conflito (409)", () => {
+  /** Resposta do backend: `ConflictApiError`, com a versão do servidor. */
+  function conflito(current: unknown) {
+    return new ApiError(409, "Alterado por outro usuário.", {
+      status: 409,
+      message: "Alterado por outro usuário.",
+      path: "/production-plans/plan-1",
+      timestamp: "2026-09-09T12:00:00",
+      current,
+    });
+  }
+
+  afterEach(() => {
+    setConflictReconciler(null);
+  });
+
+  it("marca como conflito em vez de recusado, para separar de um dado inválido", async () => {
+    mockedRequest.mockRejectedValueOnce(conflito({ id: "plan-1" }));
+
+    await enqueue(planUpdate("plan-1"));
+    const result = await flushOutbox();
+
+    expect(result.conflicted).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(byLabel("Editar plano")?.status).toBe("conflict");
+  });
+
+  it("não volta a despachar o item conflitado", async () => {
+    mockedRequest.mockRejectedValueOnce(conflito({ id: "plan-1" }));
+
+    await enqueue(planUpdate("plan-1"));
+    await flushOutbox();
+
+    mockedRequest.mockClear();
+    const segundo = await flushOutbox();
+
+    expect(mockedRequest).not.toHaveBeenCalled();
+    expect(segundo.sent).toBe(0);
+  });
+
+  it("entrega a versão do servidor ao reconciliador", async () => {
+    const servidor = { id: "plan-1", plantedArea: 9, updatedAt: "2026-09-09T10:00:00" };
+    const reconciliador = jest.fn().mockResolvedValue(undefined);
+    setConflictReconciler(reconciliador);
+
+    mockedRequest.mockRejectedValueOnce(conflito(servidor));
+
+    await enqueue(planUpdate("plan-1"));
+    await flushOutbox();
+
+    expect(reconciliador).toHaveBeenCalledTimes(1);
+    expect(reconciliador.mock.calls[0][1]).toEqual(servidor);
+  });
+
+  it("segue despachando o resto do plano, porque o recurso existe e está mais novo", async () => {
+    // Um 4xx comum aborta o restante do recurso; um 409 não deve.
+    mockedRequest
+      .mockRejectedValueOnce(conflito({ id: "plan-1" }))
+      .mockResolvedValueOnce({ id: "exec-1" });
+
+    await enqueue(planUpdate("plan-1"));
+    await enqueue(executionCreate("plan-1", "apontamento"));
+
+    const result = await flushOutbox();
+
+    expect(result.conflicted).toBe(1);
+    expect(result.sent).toBe(1);
+    expect(byLabel("apontamento")).toBeUndefined();
+  });
+
+  it("continua tratando os demais 4xx como recusa, abortando o recurso", async () => {
+    mockedRequest.mockRejectedValueOnce(
+      new ApiError(400, "Dado inválido.", null),
+    );
+
+    await enqueue(planUpdate("plan-1"));
+    await enqueue(executionCreate("plan-1", "apontamento"));
+
+    const result = await flushOutbox();
+
+    expect(result.failed).toBe(1);
+    expect(result.conflicted).toBe(0);
+    expect(byLabel("Editar plano")?.status).toBe("failed");
+    expect(byLabel("apontamento")?.status).toBe("pending");
+  });
+
+  it("não quebra o despacho quando o reconciliador falha", async () => {
+    setConflictReconciler(() => Promise.reject(new Error("cache indisponível")));
+    mockedRequest.mockRejectedValueOnce(conflito({ id: "plan-1" }));
+
+    await enqueue(planUpdate("plan-1"));
+
+    await expect(flushOutbox()).resolves.toMatchObject({ conflicted: 1 });
+    expect(byLabel("Editar plano")?.status).toBe("conflict");
+  });
+
+  it("preserva a versão-base gravada no item, que é o que o servidor compara", async () => {
+    const entry = await enqueue({
+      ...planUpdate("plan-1"),
+      baseUpdatedAt: "2026-09-01T08:00:00",
+    });
+
+    expect(entry.baseUpdatedAt).toBe("2026-09-01T08:00:00");
   });
 });

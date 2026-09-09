@@ -11,7 +11,13 @@ export type OutboxKind =
   | "execution.update"
   | "execution.delete";
 
-export type OutboxStatus = "pending" | "failed";
+/**
+ * `failed` e `conflict` são estados distintos de propósito: o primeiro diz que
+ * a operação é inválida e precisa ser corrigida ou descartada; o segundo, que
+ * ela era válida e apenas perdeu a corrida para outra edição. Só `pending`
+ * volta a ser despachado automaticamente.
+ */
+export type OutboxStatus = "pending" | "failed" | "conflict";
 
 export type OutboxEntry = {
   /** Id local (`local-...`), também usado como id provisório da entidade. */
@@ -29,6 +35,16 @@ export type OutboxEntry = {
    */
   snapshot?: unknown;
   createdAt: number;
+  /**
+   * Versão do recurso que o usuário tinha em mãos quando editou — diferente de
+   * `createdAt`, que é só o instante em que a operação entrou na fila.
+   *
+   * É essa versão que o servidor compara para detectar alteração concorrente.
+   * Comparar contra o instante da edição não funcionaria: um registro feito
+   * offline chega sempre com carimbo mais recente que o do servidor, então
+   * venceria toda disputa e o conflito nunca apareceria.
+   */
+  baseUpdatedAt?: string | null;
   attempts: number;
   lastError: string | null;
   status: OutboxStatus;
@@ -46,6 +62,24 @@ export type OutboxEntry = {
   /** Chaves de cache a invalidar quando a operação for aceita pela API. */
   invalidates: string[];
 };
+
+/**
+ * Como gravar localmente a versão que o servidor devolveu no 409.
+ *
+ * A fila não sabe interpretar o corpo de cada recurso — isso é do domínio. Para
+ * não inverter a dependência (o domínio já importa a fila), quem sabe mapear se
+ * registra aqui no boot, no mesmo padrão de `setTokenProvider`.
+ */
+export type ConflictReconciler = (
+  entry: OutboxEntry,
+  serverVersion: unknown,
+) => Promise<void>;
+
+let reconcileConflict: ConflictReconciler | null = null;
+
+export function setConflictReconciler(fn: ConflictReconciler | null): void {
+  reconcileConflict = fn;
+}
 
 let localIdCounter = 0;
 
@@ -94,6 +128,10 @@ export function getFailedCount(): number {
   return entries.filter((entry) => entry.status === "failed").length;
 }
 
+export function getConflictCount(): number {
+  return entries.filter((entry) => entry.status === "conflict").length;
+}
+
 export function subscribeOutbox(
   listener: (entries: OutboxEntry[]) => void,
 ): () => void {
@@ -119,6 +157,7 @@ export async function enqueue(
     label: input.label,
     snapshot: input.snapshot,
     createdAt: Date.now(),
+    baseUpdatedAt: input.baseUpdatedAt ?? null,
     attempts: 0,
     lastError: null,
     status: "pending",
@@ -178,6 +217,8 @@ export type FlushResult = {
   outcome: FlushOutcome;
   sent: number;
   failed: number;
+  /** Itens recusados por alteração concorrente (409). */
+  conflicted: number;
   remaining: number;
 };
 
@@ -229,6 +270,7 @@ export async function flushOutbox(): Promise<FlushResult> {
       outcome: "idle",
       sent: 0,
       failed: 0,
+      conflicted: 0,
       remaining: getPendingCount(),
     };
   }
@@ -237,7 +279,7 @@ export async function flushOutbox(): Promise<FlushResult> {
 
   const pending = entries.filter((entry) => entry.status === "pending");
   if (pending.length === 0) {
-    return { outcome: "synced", sent: 0, failed: 0, remaining: 0 };
+    return { outcome: "synced", sent: 0, failed: 0, conflicted: 0, remaining: 0 };
   }
 
   if (!isProbablyOnline(getConnectivity())) {
@@ -245,6 +287,7 @@ export async function flushOutbox(): Promise<FlushResult> {
       outcome: "offline",
       sent: 0,
       failed: 0,
+      conflicted: 0,
       remaining: pending.length,
     };
   }
@@ -257,6 +300,7 @@ export async function flushOutbox(): Promise<FlushResult> {
       outcome: "partial",
       sent: 0,
       failed: 0,
+      conflicted: 0,
       remaining: pending.length,
     };
   }
@@ -274,6 +318,7 @@ export async function flushOutbox(): Promise<FlushResult> {
   const invalidated = new Set<string>();
   let sent = 0;
   let failed = 0;
+  let conflicted = 0;
   let blockedStreams = 0;
   let outcome: FlushOutcome = "synced";
 
@@ -320,6 +365,19 @@ export async function flushOutbox(): Promise<FlushResult> {
               break streamLoop;
             }
 
+            if (error.status === 409) {
+              // Alteração concorrente: o item era válido, apenas perdeu a
+              // corrida. A versão do servidor vem no corpo e substitui o dado
+              // local; o item fica marcado para o usuário ver o que aconteceu,
+              // em vez de sumir em silêncio.
+              await applyServerVersion(entry, error.payload, invalidated);
+              await markError(entry.id, error.message, "conflict");
+              conflicted += 1;
+              // Ao contrário de um 4xx comum, aqui o recurso existe e está mais
+              // novo — as operações seguintes do mesmo plano seguem aplicáveis.
+              continue;
+            }
+
             if (error.status >= 500) {
               // Problema do servidor: o item continua válido. Espera e tenta
               // depois — e só este recurso fica bloqueado.
@@ -350,12 +408,43 @@ export async function flushOutbox(): Promise<FlushResult> {
   const remaining = getPendingCount();
   if (
     outcome === "synced" &&
-    (remaining > 0 || failed > 0 || blockedStreams > 0)
+    (remaining > 0 || failed > 0 || conflicted > 0 || blockedStreams > 0)
   ) {
     outcome = "partial";
   }
 
-  return { outcome, sent, failed, remaining };
+  return { outcome, sent, failed, conflicted, remaining };
+}
+
+/**
+ * Extrai a versão do servidor do corpo do 409 e entrega ao reconciliador para
+ * que o dado local seja substituído. O contrato do backend é
+ * `ConflictApiError`, que repete o formato de erro da API e acrescenta
+ * `current`.
+ *
+ * Falha ao gravar não derruba o despacho: o item já está marcado como
+ * conflito, e as chaves são invalidadas de qualquer forma para que a tela
+ * releia da API.
+ */
+async function applyServerVersion(
+  entry: OutboxEntry,
+  payload: unknown,
+  invalidated: Set<string>,
+): Promise<void> {
+  entry.invalidates.forEach((key) => invalidated.add(key));
+
+  const current =
+    payload && typeof payload === "object"
+      ? (payload as { current?: unknown }).current
+      : undefined;
+
+  if (current === undefined || current === null || !reconcileConflict) return;
+
+  try {
+    await reconcileConflict(entry, current);
+  } catch {
+    // Sem versão local atualizada, resta a invalidação acima.
+  }
 }
 
 async function markError(

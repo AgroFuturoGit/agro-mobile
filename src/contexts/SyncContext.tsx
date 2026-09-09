@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { reconcileProductionConflict } from "@/domain/production";
 import {
   type Connectivity,
   getConnectivity,
@@ -24,6 +25,7 @@ import {
   loadOutbox,
   type OutboxEntry,
   retryEntry,
+  setConflictReconciler,
   subscribeOutbox,
 } from "@/lib/outbox";
 
@@ -33,6 +35,8 @@ type SyncContextValue = {
   entries: OutboxEntry[];
   pendingCount: number;
   failedCount: number;
+  /** Itens recusados porque outra pessoa alterou o mesmo registro. */
+  conflictCount: number;
   syncing: boolean;
   lastSyncAt: number | null;
   lastResult: FlushResult | null;
@@ -53,6 +57,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [lastResult, setLastResult] = useState<FlushResult | null>(null);
 
+  // Quem sabe interpretar a versão devolvida num 409 é o domínio; a fila só
+  // detecta o conflito. Registrar aqui evita inverter a dependência.
+  useEffect(() => {
+    setConflictReconciler(reconcileProductionConflict);
+    return () => setConflictReconciler(null);
+  }, []);
+
   useEffect(() => {
     void loadOutbox();
     const unsubscribeOutbox = subscribeOutbox(setEntries);
@@ -68,6 +79,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const online = isProbablyOnline(connectivity);
   const pendingCount = entries.filter((e) => e.status === "pending").length;
   const failedCount = entries.filter((e) => e.status === "failed").length;
+  const conflictCount = entries.filter((e) => e.status === "conflict").length;
 
   const sync = useCallback(async (): Promise<FlushResult> => {
     setSyncing(true);
@@ -119,6 +131,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       entries,
       pendingCount,
       failedCount,
+      conflictCount,
       syncing,
       lastSyncAt,
       lastResult,
@@ -132,6 +145,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       entries,
       pendingCount,
       failedCount,
+      conflictCount,
       syncing,
       lastSyncAt,
       lastResult,
