@@ -39,7 +39,7 @@ export type OutboxEntry = {
    */
   nextAttemptAt?: number;
   meta: {
-    producerId?: string;
+    farmerId?: string;
     planId?: string;
     executionId?: string;
   };
@@ -165,8 +165,8 @@ export function pendingForPlan(planId: string): OutboxEntry[] {
   return entries.filter((entry) => entry.meta.planId === planId);
 }
 
-export function pendingForProducer(producerId: string): OutboxEntry[] {
-  return entries.filter((entry) => entry.meta.producerId === producerId);
+export function pendingForFarmer(farmerId: string): OutboxEntry[] {
+  return entries.filter((entry) => entry.meta.farmerId === farmerId);
 }
 
 // ----- Sincronização -----

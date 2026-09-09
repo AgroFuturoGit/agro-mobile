@@ -50,7 +50,7 @@ const EMPTY_STATE: QueryState<never> = {
  * Leitura cache-first: mostra o que já está no aparelho e revalida em
  * seguida. Sem rede, o cache é a resposta — não um erro.
  *
- * Passe `key = null` para desabilitar (ex.: enquanto o id do produtor ainda
+ * Passe `key = null` para desabilitar (ex.: enquanto o id do agricultor ainda
  * não foi resolvido).
  */
 export function useCachedQuery<T>(

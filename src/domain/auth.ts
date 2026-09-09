@@ -2,15 +2,15 @@ import { z } from "zod";
 
 import { apiRequest } from "@/lib/api";
 
-export type Role = "ADMIN" | "MANAGER" | "TECHNICIAN" | "PRODUCER";
+export type Role = "ADMIN" | "MANAGER" | "TECHNICIAN" | "FARMER";
 
-export const ROLES: Role[] = ["ADMIN", "MANAGER", "TECHNICIAN", "PRODUCER"];
+export const ROLES: Role[] = ["ADMIN", "MANAGER", "TECHNICIAN", "FARMER"];
 
 export const ROLE_LABELS: Record<Role, string> = {
   ADMIN: "Administrador",
   MANAGER: "Gerente",
   TECHNICIAN: "Técnico",
-  PRODUCER: "Produtor",
+  FARMER: "Agricultor",
 };
 
 export type AuthUser = {

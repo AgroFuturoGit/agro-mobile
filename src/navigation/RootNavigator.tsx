@@ -9,11 +9,11 @@ import { ActivityIndicator, Text } from "react-native-paper";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSync } from "@/contexts/SyncContext";
 import { ExecutionFormScreen } from "@/screens/ExecutionFormScreen";
+import { FarmerPickerScreen } from "@/screens/FarmerPickerScreen";
 import { LoginScreen } from "@/screens/LoginScreen";
 import { PlanDetailScreen } from "@/screens/PlanDetailScreen";
 import { PlanFormScreen } from "@/screens/PlanFormScreen";
 import { PlansScreen } from "@/screens/PlansScreen";
-import { ProducerPickerScreen } from "@/screens/ProducerPickerScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { SyncScreen } from "@/screens/SyncScreen";
 import { brand, spacing } from "@/theme";
@@ -44,19 +44,19 @@ const navigationTheme = {
 function PlansNavigator() {
   const { user } = useAuth();
 
-  // PRODUCER cai direto nos próprios planos (`/producers/me`); os outros
-  // perfis precisam escolher o produtor antes.
+  // FARMER cai direto nos próprios planos (`/farmers/me`); os outros
+  // perfis precisam escolher o agricultor antes.
   const initialRouteName =
-    user?.role === "PRODUCER"
+    user?.role === "FARMER"
       ? ("Plans" as const)
-      : ("ProducerPicker" as const);
+      : ("FarmerPicker" as const);
 
   return (
     <PlansStack.Navigator initialRouteName={initialRouteName}>
       <PlansStack.Screen
-        name="ProducerPicker"
-        component={ProducerPickerScreen}
-        options={{ title: "Produtores" }}
+        name="FarmerPicker"
+        component={FarmerPickerScreen}
+        options={{ title: "Agricultores" }}
       />
       <PlansStack.Screen
         name="Plans"

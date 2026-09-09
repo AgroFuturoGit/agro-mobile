@@ -69,7 +69,7 @@ describe("overlayPlans", () => {
     const result = overlayPlans(
       "prod-1",
       [plan("plan-1")],
-      [entry("plan.create", { producerId: "prod-1" }, pending, "local-1")],
+      [entry("plan.create", { farmerId: "prod-1" }, pending, "local-1")],
     );
 
     expect(result.map((item) => item.id)).toEqual(["local-1", "plan-1"]);
@@ -85,7 +85,7 @@ describe("overlayPlans", () => {
       [
         entry(
           "plan.update",
-          { producerId: "prod-1", planId: "plan-1" },
+          { farmerId: "prod-1", planId: "plan-1" },
           edited,
         ),
       ],
@@ -100,19 +100,19 @@ describe("overlayPlans", () => {
     const result = overlayPlans(
       "prod-1",
       [plan("plan-1"), plan("plan-2")],
-      [entry("plan.delete", { producerId: "prod-1", planId: "plan-1" })],
+      [entry("plan.delete", { farmerId: "prod-1", planId: "plan-1" })],
     );
 
     expect(result.map((item) => item.id)).toEqual(["plan-2"]);
   });
 
-  it("ignora a fila de outro produtor", () => {
+  it("ignora a fila de outro agricultor", () => {
     const other = plan("local-9", { pending: "create" });
 
     const result = overlayPlans(
       "prod-1",
       [plan("plan-1")],
-      [entry("plan.create", { producerId: "prod-2" }, other, "local-9")],
+      [entry("plan.create", { farmerId: "prod-2" }, other, "local-9")],
     );
 
     expect(result.map((item) => item.id)).toEqual(["plan-1"]);
@@ -211,7 +211,7 @@ describe("computeComparison", () => {
   /**
    * O `GET /comparison` do backend só conhece o que já chegou ao servidor.
    * Com apontamento na fila, o número certo é o que inclui a fila — é ele que
-   * o produtor acabou de registrar.
+   * o agricultor acabou de registrar.
    */
   it("soma os apontamentos e calcula o percentual realizado", () => {
     const result = computeComparison(plan("plan-1", { expectedYield: 200 }), [

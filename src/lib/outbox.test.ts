@@ -42,21 +42,21 @@ function executionCreate(planId: string, label = `ap ${planId}`): QueueInput {
   };
 }
 
-function planCreate(localId: string, producerId = "prod-1"): QueueInput {
+function planCreate(localId: string, farmerId = "prod-1"): QueueInput {
   return {
     id: localId,
     kind: "plan.create",
     method: "POST",
-    path: `/producers/${producerId}/production-plans`,
+    path: `/farmers/${farmerId}/production-plans`,
     body: { cropId: "c1", harvestId: "h1", plantedArea: 2, expectedYield: 100 },
     label: "Novo plano",
     snapshot: { id: localId, plantedArea: 2 },
-    meta: { producerId },
-    invalidates: [`plans:producer:${producerId}`],
+    meta: { farmerId },
+    invalidates: [`plans:farmer:${farmerId}`],
   };
 }
 
-function planUpdate(planId: string, producerId = "prod-1"): QueueInput {
+function planUpdate(planId: string, farmerId = "prod-1"): QueueInput {
   return {
     kind: "plan.update",
     method: "PUT",
@@ -64,8 +64,8 @@ function planUpdate(planId: string, producerId = "prod-1"): QueueInput {
     body: { plantedArea: 3, expectedYield: 120 },
     label: "Editar plano",
     snapshot: { id: planId, plantedArea: 3 },
-    meta: { producerId, planId },
-    invalidates: [`plans:producer:${producerId}`, `plan:${planId}`],
+    meta: { farmerId, planId },
+    invalidates: [`plans:farmer:${farmerId}`, `plan:${planId}`],
   };
 }
 
@@ -133,7 +133,7 @@ describe("flushOutbox", () => {
     await flushOutbox();
 
     expect(calledPaths()).toEqual([
-      "/producers/prod-1/production-plans",
+      "/farmers/prod-1/production-plans",
       "/production-plans/real-1",
     ]);
   });
@@ -249,7 +249,7 @@ describe("remapeamento do id local", () => {
    */
   it("reescreve caminho, meta e snapshot dos itens dependentes", async () => {
     mockedRequest.mockImplementation(async (path) =>
-      path === "/producers/prod-1/production-plans"
+      path === "/farmers/prod-1/production-plans"
         ? { id: "real-42" }
         : { id: "ok" },
     );

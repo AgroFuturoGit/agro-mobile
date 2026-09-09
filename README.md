@@ -4,7 +4,7 @@ App mobile **offline-first** do ProduPlan, feito com Expo + React Native +
 TypeScript. Consome a API [`agro-backend`](../agro-backend) (Spring Boot) e
 reaproveita os contratos já validados no [`agro-frontend`](../agro-frontend).
 
-O alvo é o trabalho em campo: o produtor registra a colheita onde não há
+O alvo é o trabalho em campo: o agricultor registra a colheita onde não há
 sinal, e o aparelho sincroniza sozinho quando a conexão volta.
 
 ## Escopo: o que é deste app e o que é do web
@@ -104,16 +104,16 @@ Os três primeiros rodam no CI a cada push e pull request
 
 O fluxo mais maduro do front web, portado por inteiro:
 
-- lista de planos do produtor (`GET /producers/{id}/production-plans`);
+- lista de planos do agricultor (`GET /farmers/{id}/production-plans`);
 - detalhe do plano com **previsto x realizado** e barra de progresso;
 - CRUD de apontamentos de colheita (`/production-plans/{id}/executions`);
 - CRUD de planos, com culturas e safras vindas de `/crops` e `/harvests`;
-- resolução do produtor por papel (`producerDiscoveryFor`, em
-  `src/domain/producers.ts`):
-  - **PRODUCER** → `GET /producers/me`, cai direto nos próprios planos;
-  - **ADMIN/MANAGER** → seleção de produtor via `GET /producers`;
-  - **TECHNICIAN** → seleção restrita aos produtores atribuídos a ele, via
-    `GET /technicians/me/producers`.
+- resolução do agricultor por papel (`farmerDiscoveryFor`, em
+  `src/domain/farmers.ts`):
+  - **FARMER** → `GET /farmers/me`, cai direto nos próprios planos;
+  - **ADMIN/MANAGER** → seleção de agricultor via `GET /farmers`;
+  - **TECHNICIAN** → seleção restrita aos agricultores atribuídos a ele, via
+    `GET /technicians/me/farmers`.
 
 ## Como o offline funciona
 
@@ -172,12 +172,12 @@ o disparo automático acontece quando a conexão volta.
 ```
 src/
 ├── config/env.ts        resolução da URL da API (inclui detecção do IP no Expo Go)
-├── domain/              contratos da API: auth, producers, production, catalog
+├── domain/              contratos da API: auth, farmers, production, catalog
 ├── lib/                 api, cache, outbox, mutate, net, secure, storage, format
 ├── hooks/               use-cached-query (cache-first + revalidação)
 ├── contexts/            AuthContext (sessão), SyncContext (rede + fila)
 ├── navigation/          stack raiz, abas e pilha de planos
-├── screens/             login, produtores, planos, detalhe, formulários, sync, perfil
+├── screens/             login, agricultores, planos, detalhe, formulários, sync, perfil
 ├── components/          banner de estado, estados vazios/erro/carregando
 └── theme/               tema Paper alinhado ao emerald do front web
 ```
@@ -269,12 +269,12 @@ Coisas que ainda travam funcionalidade aqui e valem uma correção no
    inválida" — mas o correto seria o filtro devolver 401.
 2. **Sem refresh token.** Com 4 h de validade, uma jornada de campo inteira
    exige novo login para sincronizar.
-3. **`GET /producers` não respeita a organização do gerente.**
-   `FindAllProducersUseCase.findAll(communityId)` ignora o usuário logado, então
-   qualquer MANAGER recebe todos os produtores do sistema. O web contorna pela
+3. **`GET /farmers` não respeita a organização do gerente.**
+   `FindAllFarmersUseCase.findAll(communityId)` ignora o usuário logado, então
+   qualquer MANAGER recebe todos os agricultores do sistema. O web contorna pela
    navegação (pousa o gerente na organização certa via `/managers/me`); o app
    exibe o que a API devolve. É falha de autorização, não de interface.
 
 > A limitação anterior de que o perfil TECHNICIAN não conseguia listar
-> produtores **não existe mais**: `GET /technicians/me/producers` está
+> agricultores **não existe mais**: `GET /technicians/me/farmers` está
 > implementado no backend e o app passou a usá-lo.

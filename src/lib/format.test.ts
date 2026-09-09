@@ -88,7 +88,7 @@ describe("parseDecimal", () => {
 
   /**
    * Regressão: o ponto era removido sem olhar o contexto, então `12.5` virava
-   * `125` — dez vezes mais colheita do que o produtor apontou, gravado sem
+   * `125` — dez vezes mais colheita do que o agricultor apontou, gravado sem
    * nenhum aviso na tela.
    */
   it("não confunde ponto decimal com separador de milhar", () => {
