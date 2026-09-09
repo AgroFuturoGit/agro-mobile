@@ -51,7 +51,7 @@ import { brand, spacing } from "@/theme";
 type Props = NativeStackScreenProps<PlansStackParamList, "PlanDetail">;
 
 export function PlanDetailScreen({ route, navigation }: Props) {
-  const { planId, producerId } = route.params;
+  const { planId, farmerId } = route.params;
   const canWrite = useCanWrite();
   const { entries } = useSync();
   const rootNavigation =
@@ -65,16 +65,16 @@ export function PlanDetailScreen({ route, navigation }: Props) {
   // O plano vem da lista já em cache: assim a tela abre igual online ou
   // offline, e planos ainda na fila (id local) também aparecem.
   const plansQuery = useCachedQuery<ProductionPlan[]>(
-    CacheKeys.plans(producerId),
-    () => fetchProductionPlans(producerId),
+    CacheKeys.plans(farmerId),
+    () => fetchProductionPlans(farmerId),
   );
 
   const plan = useMemo(
     () =>
-      overlayPlans(producerId, plansQuery.data ?? [], entries).find(
+      overlayPlans(farmerId, plansQuery.data ?? [], entries).find(
         (item) => item.id === planId,
       ) ?? null,
-    [producerId, plansQuery.data, entries, planId],
+    [farmerId, plansQuery.data, entries, planId],
   );
 
   const isLocalPlan = isLocalId(planId);
@@ -126,7 +126,7 @@ export function PlanDetailScreen({ route, navigation }: Props) {
     setConfirmPlanDelete(false);
 
     try {
-      const result = await deleteProductionPlan(plan, producerId);
+      const result = await deleteProductionPlan(plan, farmerId);
       navigation.goBack();
       if (!result.synced) {
         // Sem sinal a exclusão fica na fila; o usuário precisa saber disso.
@@ -139,7 +139,7 @@ export function PlanDetailScreen({ route, navigation }: Props) {
           : "Não foi possível excluir o plano.",
       );
     }
-  }, [plan, producerId, navigation]);
+  }, [plan, farmerId, navigation]);
 
   if (!plan) {
     if (plansQuery.loading) {
@@ -239,7 +239,7 @@ export function PlanDetailScreen({ route, navigation }: Props) {
                   mode="text"
                   icon="pencil-outline"
                   onPress={() =>
-                    rootNavigation.navigate("PlanForm", { producerId, plan })
+                    rootNavigation.navigate("PlanForm", { farmerId, plan })
                   }
                 >
                   Editar

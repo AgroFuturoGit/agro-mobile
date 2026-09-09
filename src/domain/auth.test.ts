@@ -109,8 +109,8 @@ describe("ROLE_LABELS", () => {
   it("cobre os quatro papéis do backend", () => {
     expect(Object.keys(ROLE_LABELS).sort()).toEqual([
       "ADMIN",
+      "FARMER",
       "MANAGER",
-      "PRODUCER",
       "TECHNICIAN",
     ]);
   });

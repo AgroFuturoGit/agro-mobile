@@ -7,13 +7,13 @@ export type AuthStackParamList = {
 };
 
 export type PlansStackParamList = {
-  /** Escolha do produtor — só aparece para ADMIN/MANAGER/TECHNICIAN. */
-  ProducerPicker: undefined;
-  Plans: { producerId: string; producerName: string } | undefined;
+  /** Escolha do agricultor — só aparece para ADMIN/MANAGER/TECHNICIAN. */
+  FarmerPicker: undefined;
+  Plans: { farmerId: string; farmerName: string } | undefined;
   PlanDetail: {
     planId: string;
-    producerId: string;
-    producerName: string;
+    farmerId: string;
+    farmerName: string;
   };
 };
 
@@ -30,7 +30,7 @@ export type RootStackParamList = {
    * passadas inteiras (JSON puro) para que a edição funcione offline, sem
    * depender de uma releitura da API.
    */
-  PlanForm: { producerId: string; plan?: ProductionPlan };
+  PlanForm: { farmerId: string; plan?: ProductionPlan };
   ExecutionForm: { plan: ProductionPlan; execution?: ProductionExecution };
   Reauth: undefined;
 };

@@ -10,12 +10,12 @@ export type CacheEntry<T> = {
  * mutação (inclusive a que veio do outbox) não precise adivinhar strings.
  */
 export const CacheKeys = {
-  myProducer: "producer:me",
-  producers: (communityId?: string) =>
-    communityId ? `producers:community:${communityId}` : "producers:all",
-  /** Produtores atribuídos ao técnico logado — recorte diferente de `producers`. */
-  assignedProducers: "producers:assigned",
-  plans: (producerId: string) => `plans:producer:${producerId}`,
+  myFarmer: "farmer:me",
+  farmers: (communityId?: string) =>
+    communityId ? `farmers:community:${communityId}` : "farmers:all",
+  /** Agricultores atribuídos ao técnico logado — recorte diferente de `farmers`. */
+  assignedFarmers: "farmers:assigned",
+  plans: (farmerId: string) => `plans:farmer:${farmerId}`,
   plan: (planId: string) => `plan:${planId}`,
   executions: (planId: string) => `executions:plan:${planId}`,
   comparison: (planId: string) => `comparison:plan:${planId}`,

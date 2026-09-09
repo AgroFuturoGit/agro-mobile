@@ -13,50 +13,50 @@ import {
 } from "@/components/StateViews";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  type Producer,
-  producerDiscoveryFor,
-  producerDisplayName,
-} from "@/domain/producers";
+  type Farmer,
+  farmerDiscoveryFor,
+  farmerDisplayName,
+} from "@/domain/farmers";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import type { PlansStackParamList } from "@/navigation/types";
 import { brand, spacing } from "@/theme";
 
-type Props = NativeStackScreenProps<PlansStackParamList, "ProducerPicker">;
+type Props = NativeStackScreenProps<PlansStackParamList, "FarmerPicker">;
 
-export function ProducerPickerScreen({ navigation }: Props) {
+export function FarmerPickerScreen({ navigation }: Props) {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
 
   // Cada papel tem uma rota de descoberta diferente (ADMIN/MANAGER listam
   // todos, TECHNICIAN só os atribuídos). A escolha vive no domínio.
   const discovery = useMemo(
-    () => producerDiscoveryFor(user?.role),
+    () => farmerDiscoveryFor(user?.role),
     [user?.role],
   );
 
-  const query = useCachedQuery<Producer[]>(
+  const query = useCachedQuery<Farmer[]>(
     discovery?.cacheKey ?? null,
     // `key === null` desliga a query, então o fetcher nunca é chamado aqui.
     discovery?.fetch ?? fetchNothing,
   );
 
-  const producers = useMemo(() => {
+  const farmers = useMemo(() => {
     const list = query.data ?? [];
     const term = search.trim().toLowerCase();
     if (!term) return list;
 
-    return list.filter((producer) => {
-      const name = producerDisplayName(producer).toLowerCase();
-      const community = producer.community?.name.toLowerCase() ?? "";
+    return list.filter((farmer) => {
+      const name = farmerDisplayName(farmer).toLowerCase();
+      const community = farmer.community?.name.toLowerCase() ?? "";
       return name.includes(term) || community.includes(term);
     });
   }, [query.data, search]);
 
-  const openProducer = useCallback(
-    (producer: Producer) => {
+  const openFarmer = useCallback(
+    (farmer: Farmer) => {
       navigation.navigate("Plans", {
-        producerId: producer.id,
-        producerName: producerDisplayName(producer),
+        farmerId: farmer.id,
+        farmerName: farmerDisplayName(farmer),
       });
     },
     [navigation],
@@ -68,8 +68,8 @@ export function ProducerPickerScreen({ navigation }: Props) {
         <OfflineBanner />
         <EmptyState
           icon="account-search-outline"
-          title="Seleção de produtor indisponível"
-          description="Seu perfil não tem permissão para listar produtores."
+          title="Seleção de agricultor indisponível"
+          description="Seu perfil não tem permissão para listar agricultores."
         />
       </View>
     );
@@ -79,7 +79,7 @@ export function ProducerPickerScreen({ navigation }: Props) {
     return (
       <View style={styles.container}>
         <OfflineBanner />
-        <LoadingState label="Carregando produtores..." />
+        <LoadingState label="Carregando agricultores..." />
       </View>
     );
   }
@@ -100,13 +100,13 @@ export function ProducerPickerScreen({ navigation }: Props) {
       <Searchbar
         value={search}
         onChangeText={setSearch}
-        placeholder="Buscar produtor ou comunidade"
+        placeholder="Buscar agricultor ou comunidade"
         style={styles.search}
         inputStyle={styles.searchInput}
       />
 
       <FlatList
-        data={producers}
+        data={farmers}
         keyExtractor={(item) => item.id}
         ItemSeparatorComponent={Divider}
         refreshControl={
@@ -118,27 +118,27 @@ export function ProducerPickerScreen({ navigation }: Props) {
         ListEmptyComponent={
           <EmptyState
             icon="account-off-outline"
-            title="Nenhum produtor encontrado"
+            title="Nenhum agricultor encontrado"
             description={
               search
                 ? "Ajuste a busca e tente de novo."
                 : user?.role === "TECHNICIAN"
-                  ? "Nenhum produtor foi atribuído a você. A vinculação é feita pelo gerente ou administrador no sistema web."
-                  : "Nenhum produtor cadastrado até agora."
+                  ? "Nenhum agricultor foi atribuído a você. A vinculação é feita pelo gerente ou administrador no sistema web."
+                  : "Nenhum agricultor cadastrado até agora."
             }
           />
         }
         ListFooterComponent={
-          producers.length > 0 ? (
+          farmers.length > 0 ? (
             <CacheHint cachedAt={query.cachedAt} stale={query.stale} />
           ) : null
         }
         contentContainerStyle={
-          producers.length === 0 ? styles.emptyContent : undefined
+          farmers.length === 0 ? styles.emptyContent : undefined
         }
         renderItem={({ item }) => (
           <List.Item
-            title={producerDisplayName(item)}
+            title={farmerDisplayName(item)}
             description={() => (
               <Text variant="bodySmall" style={styles.muted}>
                 {item.community?.name ?? "Sem comunidade"}
@@ -149,7 +149,7 @@ export function ProducerPickerScreen({ navigation }: Props) {
             )}
             left={(props) => <List.Icon {...props} icon="account-outline" />}
             right={(props) => <List.Icon {...props} icon="chevron-right" />}
-            onPress={() => openProducer(item)}
+            onPress={() => openFarmer(item)}
           />
         )}
       />
@@ -158,7 +158,7 @@ export function ProducerPickerScreen({ navigation }: Props) {
 }
 
 /** Placeholder para quando o papel não tem rota de descoberta. */
-function fetchNothing(): Promise<Producer[]> {
+function fetchNothing(): Promise<Farmer[]> {
   return Promise.resolve([]);
 }
 

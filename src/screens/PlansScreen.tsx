@@ -18,10 +18,10 @@ import {
 import { useAuth, useCanWrite } from "@/contexts/AuthContext";
 import { useSync } from "@/contexts/SyncContext";
 import {
-  fetchMyProducer,
-  type Producer,
-  producerDisplayName,
-} from "@/domain/producers";
+  type Farmer,
+  farmerDisplayName,
+  fetchMyFarmer,
+} from "@/domain/farmers";
 import {
   fetchProductionPlans,
   overlayPlans,
@@ -45,48 +45,48 @@ export function PlansScreen({ route, navigation }: Props) {
   const rootNavigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  const paramProducerId = route.params?.producerId ?? null;
+  const paramFarmerId = route.params?.farmerId ?? null;
 
-  // PRODUCER descobre o próprio cadastro em `/producers/me`; os demais
-  // perfis chegam aqui com o produtor já escolhido na tela anterior.
-  const myProducerQuery = useCachedQuery<Producer>(
-    !paramProducerId && user?.role === "PRODUCER" ? CacheKeys.myProducer : null,
-    fetchMyProducer,
+  // FARMER descobre o próprio cadastro em `/farmers/me`; os demais
+  // perfis chegam aqui com o agricultor já escolhido na tela anterior.
+  const myFarmerQuery = useCachedQuery<Farmer>(
+    !paramFarmerId && user?.role === "FARMER" ? CacheKeys.myFarmer : null,
+    fetchMyFarmer,
   );
 
-  const producerId = paramProducerId ?? myProducerQuery.data?.id ?? null;
-  const producerName =
-    route.params?.producerName ??
-    (myProducerQuery.data ? producerDisplayName(myProducerQuery.data) : "");
+  const farmerId = paramFarmerId ?? myFarmerQuery.data?.id ?? null;
+  const farmerName =
+    route.params?.farmerName ??
+    (myFarmerQuery.data ? farmerDisplayName(myFarmerQuery.data) : "");
 
   const plansQuery = useCachedQuery<ProductionPlan[]>(
-    producerId ? CacheKeys.plans(producerId) : null,
-    () => fetchProductionPlans(producerId as string),
+    farmerId ? CacheKeys.plans(farmerId) : null,
+    () => fetchProductionPlans(farmerId as string),
   );
 
   const plans = useMemo(
     () =>
-      producerId
-        ? overlayPlans(producerId, plansQuery.data ?? [], entries)
+      farmerId
+        ? overlayPlans(farmerId, plansQuery.data ?? [], entries)
         : [],
-    [producerId, plansQuery.data, entries],
+    [farmerId, plansQuery.data, entries],
   );
 
   useEffect(() => {
     navigation.setOptions({
-      title: producerName ? `Planos · ${producerName}` : "Planos de produção",
+      title: farmerName ? `Planos · ${farmerName}` : "Planos de produção",
     });
-  }, [navigation, producerName]);
+  }, [navigation, farmerName]);
 
   const resolving =
-    myProducerQuery.loading || (!producerId && !plansQuery.error);
-  const producerError = myProducerQuery.error;
+    myFarmerQuery.loading || (!farmerId && !plansQuery.error);
+  const farmerError = myFarmerQuery.error;
 
-  if (producerError && !producerId) {
+  if (farmerError && !farmerId) {
     return (
       <View style={styles.container}>
         <OfflineBanner />
-        <ErrorState message={producerError} onRetry={myProducerQuery.refetch} />
+        <ErrorState message={farmerError} onRetry={myFarmerQuery.refetch} />
       </View>
     );
   }
@@ -133,7 +133,7 @@ export function PlansScreen({ route, navigation }: Props) {
             description={
               canWrite
                 ? "Cadastre o primeiro plano para começar a registrar a colheita."
-                : "Este produtor ainda não tem planos cadastrados."
+                : "Este agricultor ainda não tem planos cadastrados."
             }
           />
         }
@@ -151,20 +151,20 @@ export function PlansScreen({ route, navigation }: Props) {
             onPress={() =>
               navigation.navigate("PlanDetail", {
                 planId: item.id,
-                producerId: producerId as string,
-                producerName,
+                farmerId: farmerId as string,
+                farmerName,
               })
             }
           />
         )}
       />
 
-      {canWrite && producerId ? (
+      {canWrite && farmerId ? (
         <FAB
           icon="plus"
           label="Novo plano"
           style={styles.fab}
-          onPress={() => rootNavigation.navigate("PlanForm", { producerId })}
+          onPress={() => rootNavigation.navigate("PlanForm", { farmerId })}
         />
       ) : null}
     </View>

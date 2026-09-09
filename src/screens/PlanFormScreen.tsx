@@ -40,7 +40,7 @@ import { brand, spacing } from "@/theme";
 type Props = NativeStackScreenProps<RootStackParamList, "PlanForm">;
 
 export function PlanFormScreen({ route, navigation }: Props) {
-  const { producerId, plan } = route.params;
+  const { farmerId, plan } = route.params;
   const { online } = useSync();
   const isEditing = plan !== undefined;
 
@@ -111,14 +111,14 @@ export function PlanFormScreen({ route, navigation }: Props) {
 
     try {
       if (isEditing) {
-        await updateProductionPlan(plan, producerId, {
+        await updateProductionPlan(plan, farmerId, {
           plantedArea: parsedArea as number,
           expectedYield: parsedYield as number,
           plannedPlantingDate: parsedDate,
         });
       } else {
         await createProductionPlan(
-          producerId,
+          farmerId,
           {
             cropId: cropId as string,
             harvestId: harvestId as string,

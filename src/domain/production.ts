@@ -159,10 +159,10 @@ function mapComparison(raw: ComparisonApiResponse): ProductionComparison {
 // ----- Leituras -----
 
 export function fetchProductionPlans(
-  producerId: string,
+  farmerId: string,
 ): Promise<ProductionPlan[]> {
   return apiRequest<PlanApiResponse[]>(
-    `/producers/${producerId}/production-plans`,
+    `/farmers/${farmerId}/production-plans`,
     { method: "GET" },
   ).then((list) => list.map(mapPlan));
 }
@@ -194,7 +194,7 @@ export function fetchProductionComparison(
 // ----- Mutações (online agora, ou fila offline) -----
 
 export function createProductionPlan(
-  producerId: string,
+  farmerId: string,
   payload: ProductionPlanCreatePayload,
   display: { crop: PlanCrop | null; harvest: PlanHarvest | null },
 ): Promise<MutationResult<ProductionPlan>> {
@@ -213,7 +213,7 @@ export function createProductionPlan(
 
   return mutate<ProductionPlan>({
     request: () =>
-      apiRequest<PlanApiResponse>(`/producers/${producerId}/production-plans`, {
+      apiRequest<PlanApiResponse>(`/farmers/${farmerId}/production-plans`, {
         method: "POST",
         body: payload,
       }).then(mapPlan),
@@ -221,19 +221,19 @@ export function createProductionPlan(
       id: localId,
       kind: "plan.create",
       method: "POST",
-      path: `/producers/${producerId}/production-plans`,
+      path: `/farmers/${farmerId}/production-plans`,
       body: payload,
       label: `Novo plano — ${display.crop?.name ?? "cultura"} (${formatNumber(payload.plantedArea)} ha)`,
       snapshot,
-      meta: { producerId },
-      invalidates: [CacheKeys.plans(producerId)],
+      meta: { farmerId },
+      invalidates: [CacheKeys.plans(farmerId)],
     },
   });
 }
 
 export function updateProductionPlan(
   plan: ProductionPlan,
-  producerId: string,
+  farmerId: string,
   payload: ProductionPlanUpdatePayload,
 ): Promise<MutationResult<ProductionPlan>> {
   const snapshot: ProductionPlan = {
@@ -257,15 +257,15 @@ export function updateProductionPlan(
       body: payload,
       label: `Editar plano — ${plan.crop?.name ?? "cultura"}`,
       snapshot,
-      meta: { producerId, planId: plan.id },
-      invalidates: [CacheKeys.plans(producerId), CacheKeys.plan(plan.id)],
+      meta: { farmerId, planId: plan.id },
+      invalidates: [CacheKeys.plans(farmerId), CacheKeys.plan(plan.id)],
     },
   });
 }
 
 export function deleteProductionPlan(
   plan: ProductionPlan,
-  producerId: string,
+  farmerId: string,
 ): Promise<MutationResult<void>> {
   return mutate<void>({
     request: () =>
@@ -275,8 +275,8 @@ export function deleteProductionPlan(
       method: "DELETE",
       path: `/production-plans/${plan.id}`,
       label: `Excluir plano — ${plan.crop?.name ?? "cultura"}`,
-      meta: { producerId, planId: plan.id },
-      invalidates: [CacheKeys.plans(producerId), CacheKeys.plan(plan.id)],
+      meta: { farmerId, planId: plan.id },
+      invalidates: [CacheKeys.plans(farmerId), CacheKeys.plan(plan.id)],
     },
   });
 }
@@ -376,14 +376,14 @@ export function deleteProductionExecution(
 // registrado no campo "some" até o celular achar sinal.
 
 export function overlayPlans(
-  producerId: string,
+  farmerId: string,
   cached: ProductionPlan[],
   entries: OutboxEntry[],
 ): ProductionPlan[] {
-  // `plan.update`/`plan.delete` também gravam `producerId` em `meta`, então
+  // `plan.update`/`plan.delete` também gravam `farmerId` em `meta`, então
   // um filtro só cobre criação, edição e exclusão.
   const pending = entries.filter(
-    (entry) => entry.meta.producerId === producerId,
+    (entry) => entry.meta.farmerId === farmerId,
   );
 
   let result = [...cached];
@@ -443,7 +443,7 @@ export function overlayExecutions(
  *
  * `GET /comparison` só conhece o que já chegou ao servidor. Offline (ou com
  * apontamentos na fila) o número certo é o que inclui a fila — é ele que o
- * produtor acabou de registrar.
+ * agricultor acabou de registrar.
  */
 export function computeComparison(
   plan: ProductionPlan,

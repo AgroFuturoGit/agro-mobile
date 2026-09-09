@@ -16,7 +16,7 @@ export type Organization = {
   type: OrganizationType;
 };
 
-export type Producer = {
+export type Farmer = {
   id: string;
   aliasName: string | null;
   isCompliant: boolean | null;
@@ -40,7 +40,7 @@ type OrganizationApiResponse = {
   type: OrganizationType;
 };
 
-type ProducerApiResponse = {
+type FarmerApiResponse = {
   id: string;
   aliasName: string | null;
   isCompliant: boolean | null;
@@ -57,7 +57,7 @@ type ProducerApiResponse = {
   } | null;
 };
 
-function mapProducer(raw: ProducerApiResponse): Producer {
+function mapFarmer(raw: FarmerApiResponse): Farmer {
   return {
     id: raw.id,
     aliasName: raw.aliasName ?? null,
@@ -87,71 +87,71 @@ function mapProducer(raw: ProducerApiResponse): Producer {
   };
 }
 
-/** `GET /producers/me` — exclusivo do perfil PRODUCER. */
-export function fetchMyProducer(): Promise<Producer> {
-  return apiRequest<ProducerApiResponse>("/producers/me", {
+/** `GET /farmers/me` — exclusivo do perfil FARMER. */
+export function fetchMyFarmer(): Promise<Farmer> {
+  return apiRequest<FarmerApiResponse>("/farmers/me", {
     method: "GET",
-  }).then(mapProducer);
+  }).then(mapFarmer);
 }
 
-/** `GET /producers` — exige ADMIN ou MANAGER no backend. */
-export function fetchProducers(communityId?: string): Promise<Producer[]> {
+/** `GET /farmers` — exige ADMIN ou MANAGER no backend. */
+export function fetchFarmers(communityId?: string): Promise<Farmer[]> {
   const query = communityId
     ? `?communityId=${encodeURIComponent(communityId)}`
     : "";
-  return apiRequest<ProducerApiResponse[]>(`/producers${query}`, {
+  return apiRequest<FarmerApiResponse[]>(`/farmers${query}`, {
     method: "GET",
-  }).then((list) => list.map(mapProducer));
+  }).then((list) => list.map(mapFarmer));
 }
 
 /**
- * `GET /technicians/me/producers` — produtores atribuídos ao TECHNICIAN
+ * `GET /technicians/me/farmers` — agricultores atribuídos ao TECHNICIAN
  * autenticado, via a relação N:N `TechnicalAssistance`. É a única rota de
- * descoberta que o perfil Técnico tem: `GET /producers` exige ADMIN/MANAGER e
- * `GET /producers/me` é exclusivo de PRODUCER.
+ * descoberta que o perfil Técnico tem: `GET /farmers` exige ADMIN/MANAGER e
+ * `GET /farmers/me` é exclusivo de FARMER.
  */
-export function fetchAssignedProducers(): Promise<Producer[]> {
-  return apiRequest<ProducerApiResponse[]>("/technicians/me/producers", {
+export function fetchAssignedFarmers(): Promise<Farmer[]> {
+  return apiRequest<FarmerApiResponse[]>("/technicians/me/farmers", {
     method: "GET",
-  }).then((list) => list.map(mapProducer));
+  }).then((list) => list.map(mapFarmer));
 }
 
-export type ProducerDiscovery = {
+export type FarmerDiscovery = {
   /** Chave de cache — separada por papel, porque o conjunto visível difere. */
   cacheKey: string;
-  fetch: () => Promise<Producer[]>;
+  fetch: () => Promise<Farmer[]>;
 };
 
 /**
- * Como cada papel descobre os produtores que pode ver.
+ * Como cada papel descobre os agricultores que pode ver.
  *
- * O backend não tem uma rota única: ADMIN e MANAGER listam por `/producers`,
+ * O backend não tem uma rota única: ADMIN e MANAGER listam por `/farmers`,
  * o TECHNICIAN só alcança os que lhe foram atribuídos. Concentrar a escolha
  * aqui evita que a tela precise conhecer as regras de `@PreAuthorize`.
  *
- * PRODUCER não passa por aqui — cai direto nos próprios planos via
- * `fetchMyProducer`. `null` significa "este papel não seleciona produtor".
+ * FARMER não passa por aqui — cai direto nos próprios planos via
+ * `fetchMyFarmer`. `null` significa "este papel não seleciona agricultor".
  */
-export function producerDiscoveryFor(
+export function farmerDiscoveryFor(
   role: Role | null | undefined,
-): ProducerDiscovery | null {
+): FarmerDiscovery | null {
   switch (role) {
     case "ADMIN":
     case "MANAGER":
       return {
-        cacheKey: CacheKeys.producers(),
-        fetch: () => fetchProducers(),
+        cacheKey: CacheKeys.farmers(),
+        fetch: () => fetchFarmers(),
       };
     case "TECHNICIAN":
       return {
-        cacheKey: CacheKeys.assignedProducers,
-        fetch: fetchAssignedProducers,
+        cacheKey: CacheKeys.assignedFarmers,
+        fetch: fetchAssignedFarmers,
       };
     default:
       return null;
   }
 }
 
-export function producerDisplayName(producer: Producer): string {
-  return producer.aliasName ?? producer.user?.fullName ?? "Produtor sem nome";
+export function farmerDisplayName(farmer: Farmer): string {
+  return farmer.aliasName ?? farmer.user?.fullName ?? "Agricultor sem nome";
 }

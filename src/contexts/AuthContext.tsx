@@ -194,7 +194,7 @@ export function useAuth(): AuthContextValue {
 }
 
 /** Perfis autorizados a criar/editar planos e apontamentos no backend. */
-const WRITE_ROLES = new Set(["ADMIN", "TECHNICIAN", "PRODUCER"]);
+const WRITE_ROLES = new Set(["ADMIN", "TECHNICIAN", "FARMER"]);
 
 export function useCanWrite(): boolean {
   const { user } = useAuth();
