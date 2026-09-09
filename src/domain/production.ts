@@ -1,5 +1,5 @@
 import { apiRequest } from "@/lib/api";
-import { CacheKeys } from "@/lib/cache";
+import { CacheKeys, readCache, writeCache } from "@/lib/cache";
 import { formatDate, formatNumber } from "@/lib/format";
 import { mutate, type MutationResult } from "@/lib/mutate";
 import { createLocalId, isLocalId, type OutboxEntry } from "@/lib/outbox";
@@ -29,6 +29,11 @@ export type ProductionPlan = {
   expectedYield: number;
   plannedPlantingDate: string | null;
   createdAt: string | null;
+  /**
+   * Versão do registro no servidor. É o que uma edição envia de volta como
+   * `baseUpdatedAt` para que o servidor detecte alteração concorrente.
+   */
+  updatedAt: string | null;
   /** Preenchido só quando o registro ainda não foi aceito pela API. */
   pending: PendingState;
 };
@@ -39,6 +44,8 @@ export type ProductionExecution = {
   actualYield: number;
   harvestDate: string | null;
   createdAt: string | null;
+  /** Ver `ProductionPlan.updatedAt`. */
+  updatedAt: string | null;
   pending: PendingState;
 };
 
@@ -89,6 +96,7 @@ type PlanApiResponse = {
   expectedYield: number | string;
   plannedPlantingDate: string | null;
   createdAt: string | null;
+  updatedAt: string | null;
 };
 
 type ExecutionApiResponse = {
@@ -97,6 +105,7 @@ type ExecutionApiResponse = {
   actualYield: number | string;
   harvestDate: string | null;
   createdAt: string | null;
+  updatedAt: string | null;
 };
 
 type ComparisonApiResponse = {
@@ -131,6 +140,7 @@ function mapPlan(raw: PlanApiResponse): ProductionPlan {
     expectedYield: num(raw.expectedYield),
     plannedPlantingDate: raw.plannedPlantingDate ?? null,
     createdAt: raw.createdAt ?? null,
+    updatedAt: raw.updatedAt ?? null,
     pending: null,
   };
 }
@@ -142,6 +152,7 @@ function mapExecution(raw: ExecutionApiResponse): ProductionExecution {
     actualYield: num(raw.actualYield),
     harvestDate: raw.harvestDate ?? null,
     createdAt: raw.createdAt ?? null,
+    updatedAt: raw.updatedAt ?? null,
     pending: null,
   };
 }
@@ -208,6 +219,7 @@ export function createProductionPlan(
     expectedYield: payload.expectedYield,
     plannedPlantingDate: payload.plannedPlantingDate ?? null,
     createdAt: null,
+    updatedAt: null,
     pending: "create",
   };
 
@@ -244,17 +256,23 @@ export function updateProductionPlan(
     pending: "update",
   };
 
+  // A versão que o usuário tinha em mãos ao abrir o formulário. Vai no corpo
+  // para o servidor arbitrar e fica no item da fila para que o despacho, que
+  // pode acontecer horas depois, continue comparando contra ela.
+  const body = { ...payload, baseUpdatedAt: plan.updatedAt };
+
   return mutate<ProductionPlan>({
     request: () =>
       apiRequest<PlanApiResponse>(`/production-plans/${plan.id}`, {
         method: "PUT",
-        body: payload,
+        body,
       }).then(mapPlan),
     queue: {
       kind: "plan.update",
       method: "PUT",
       path: `/production-plans/${plan.id}`,
-      body: payload,
+      body,
+      baseUpdatedAt: plan.updatedAt,
       label: `Editar plano — ${plan.crop?.name ?? "cultura"}`,
       snapshot,
       meta: { farmerId, planId: plan.id },
@@ -293,6 +311,7 @@ export function createProductionExecution(
     actualYield: payload.actualYield,
     harvestDate: payload.harvestDate,
     createdAt: null,
+    updatedAt: null,
     pending: "create",
   };
 
@@ -329,17 +348,20 @@ export function updateProductionExecution(
     pending: "update",
   };
 
+  const body = { ...payload, baseUpdatedAt: execution.updatedAt };
+
   return mutate<ProductionExecution>({
     request: () =>
       apiRequest<ExecutionApiResponse>(
         `/production-executions/${execution.id}`,
-        { method: "PUT", body: payload },
+        { method: "PUT", body },
       ).then(mapExecution),
     queue: {
       kind: "execution.update",
       method: "PUT",
       path: `/production-executions/${execution.id}`,
-      body: payload,
+      body,
+      baseUpdatedAt: execution.updatedAt,
       label: `Editar apontamento de ${formatDate(payload.harvestDate)}`,
       snapshot,
       meta: { planId, executionId: execution.id },
@@ -471,4 +493,39 @@ export function computeComparison(
 /** Plano ainda não aceito pela API não tem id real — não aceita filho. */
 export function canReceiveExecutions(plan: ProductionPlan): boolean {
   return !isLocalId(plan.id);
+}
+
+// ----- Reconciliação de conflito -----
+
+/**
+ * Grava localmente a versão que o servidor devolveu junto de um 409.
+ *
+ * Registrado na fila por `setConflictReconciler` no boot: a fila detecta o
+ * conflito, mas quem sabe interpretar o corpo de um plano ou de um apontamento
+ * é o domínio. A tela é avisada pela invalidação que o próprio despacho dispara.
+ */
+export async function reconcileProductionConflict(
+  entry: OutboxEntry,
+  serverVersion: unknown,
+): Promise<void> {
+  if (entry.kind.startsWith("plan.")) {
+    const plan = mapPlan(serverVersion as PlanApiResponse);
+    await writeCache(CacheKeys.plan(plan.id), plan);
+    return;
+  }
+
+  if (entry.kind.startsWith("execution.")) {
+    const execution = mapExecution(serverVersion as ExecutionApiResponse);
+    const key = CacheKeys.executions(execution.productionPlanId);
+
+    // A tela lê a lista de apontamentos, não o apontamento isolado: trocar o
+    // item dentro da lista é o que faz a correção aparecer.
+    const cached = await readCache<ProductionExecution[]>(key);
+    if (!cached) return;
+
+    const atualizada = cached.data.map((item) =>
+      item.id === execution.id ? execution : item,
+    );
+    await writeCache(key, atualizada);
+  }
 }

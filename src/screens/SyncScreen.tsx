@@ -27,6 +27,7 @@ export function SyncScreen() {
     entries,
     pendingCount,
     failedCount,
+    conflictCount,
     syncing,
     lastSyncAt,
     sync,
@@ -69,6 +70,11 @@ export function SyncScreen() {
             <View style={styles.counters}>
               <Counter label="Na fila" value={pendingCount} />
               <Counter label="Recusados" value={failedCount} tone="danger" />
+              <Counter
+                label="Conflitos"
+                value={conflictCount}
+                tone="warning"
+              />
               <Counter
                 label="Última sincronização"
                 text={lastSyncAt ? formatRelative(lastSyncAt) : "—"}
@@ -145,6 +151,7 @@ function QueueRow({
   onRetry: () => void;
 }) {
   const failed = entry.status === "failed";
+  const conflict = entry.status === "conflict";
 
   return (
     <Card mode="outlined" style={styles.card}>
@@ -155,20 +162,46 @@ function QueueRow({
             {formatDateTime(entry.createdAt)}
           </Text>
           {entry.lastError ? (
-            <Text variant="bodySmall" style={styles.errorText}>
+            <Text
+              variant="bodySmall"
+              style={conflict ? styles.conflictText : styles.errorText}
+            >
               {entry.lastError}
+            </Text>
+          ) : null}
+          {conflict ? (
+            <Text variant="bodySmall" style={styles.muted}>
+              A versão de quem editou antes já está na tela. Descarte esta
+              alteração e refaça, se ainda fizer sentido.
             </Text>
           ) : null}
         </View>
 
         <Chip
           compact
-          style={failed ? styles.failedChip : styles.pendingChip}
-          textStyle={failed ? styles.failedChipText : styles.pendingChipText}
+          style={
+            conflict
+              ? styles.conflictChip
+              : failed
+                ? styles.failedChip
+                : styles.pendingChip
+          }
+          textStyle={
+            conflict
+              ? styles.conflictChipText
+              : failed
+                ? styles.failedChipText
+                : styles.pendingChipText
+          }
         >
-          {failed ? "Recusado" : "Na fila"}
+          {conflict ? "Conflito" : failed ? "Recusado" : "Na fila"}
         </Chip>
 
+        {/*
+          Reenviar não ajuda num conflito: o item carrega a versão antiga e
+          seria recusado de novo. O dado do servidor já está na tela — resta
+          descartar e, se ainda fizer sentido, refazer a edição.
+        */}
         {failed ? (
           <IconButton icon="refresh" size={20} onPress={onRetry} />
         ) : null}
@@ -192,7 +225,7 @@ function Counter({
   label: string;
   value?: number;
   text?: string;
-  tone?: "danger";
+  tone?: "danger" | "warning";
 }) {
   return (
     <View style={styles.counter}>
@@ -201,7 +234,15 @@ function Counter({
       </Text>
       <Text
         variant="titleMedium"
-        style={tone === "danger" && value ? styles.errorText : undefined}
+        style={
+          value
+            ? tone === "danger"
+              ? styles.errorText
+              : tone === "warning"
+                ? styles.conflictText
+                : undefined
+            : undefined
+        }
       >
         {text ?? value ?? 0}
       </Text>
@@ -219,8 +260,17 @@ function describeResult(result: FlushResult): string {
       return "Sem conexão com o servidor. A fila continua guardada.";
     case "unauthorized":
       return "Sessão expirada. Entre novamente para sincronizar.";
-    case "partial":
-      return `${result.sent} enviado(s), ${result.remaining} na fila, ${result.failed} recusado(s).`;
+    case "partial": {
+      const partes = [
+        `${result.sent} enviado(s)`,
+        `${result.remaining} na fila`,
+        `${result.failed} recusado(s)`,
+      ];
+      if (result.conflicted > 0) {
+        partes.push(`${result.conflicted} em conflito`);
+      }
+      return `${partes.join(", ")}.`;
+    }
     default:
       return "Sincronização em andamento.";
   }
@@ -253,4 +303,7 @@ const styles = StyleSheet.create({
   pendingChipText: { color: brand.info, fontSize: 12 },
   failedChip: { backgroundColor: brand.dangerLight },
   failedChipText: { color: brand.danger, fontSize: 12 },
+  conflictChip: { backgroundColor: brand.warningLight },
+  conflictChipText: { color: brand.warning, fontSize: 12 },
+  conflictText: { color: brand.warning },
 });
