@@ -35,6 +35,8 @@ function execution(
     productionPlanId: "plan-1",
     actualYield: 30,
     harvestDate: "2026-08-01",
+    latitude: null,
+    longitude: null,
     updatedAt: null,
     createdAt: "2026-08-01",
     pending: null,

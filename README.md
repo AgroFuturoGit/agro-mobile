@@ -115,6 +115,25 @@ O fluxo mais maduro do front web, portado por inteiro:
   - **TECHNICIAN** → seleção restrita aos agricultores atribuídos a ele, via
     `GET /technicians/me/farmers`.
 
+### Localização do apontamento
+
+Ao abrir o formulário de apontamento o app pede a permissão de localização —
+ali, e não no boot, para que o pedido chegue junto da ação que o justifica — e
+já inicia a leitura. Ao salvar, as coordenadas entram no corpo da requisição e,
+por consequência, ficam **congeladas no item da fila**: quando o despacho
+acontecer, horas depois, a posição enviada continua sendo a do trabalho em
+campo, e não a de onde o sinal de internet voltou.
+
+O GPS tem **3 segundos** para responder (`LOCATION_TIMEOUT_MS`). Passado o
+prazo, o apontamento é salvo sem coordenada e a tela explica por quê. Obter
+posição não é instantâneo: com o aparelho recém-ligado, sob mata fechada ou
+dentro de um galpão, a primeira leitura pode levar dezenas de segundos ou nunca
+chegar — e nada disso pode impedir o registro da colheita.
+
+O prazo é imposto por `Promise.race` em `src/lib/location.ts`, porque o
+`getCurrentPositionAsync` do `expo-location` não aceita timeout: ele resolve
+quando conseguir.
+
 ## Como o offline funciona
 
 Três peças, em `src/lib`:

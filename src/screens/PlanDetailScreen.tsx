@@ -443,6 +443,19 @@ function ExecutionRow({
           <Text variant="bodySmall" style={styles.muted}>
             Colheita em {formatDate(execution.harvestDate)}
           </Text>
+          {/* Sinaliza rastreabilidade espacial: este registro sabe onde foi feito. */}
+          {execution.latitude !== null && execution.longitude !== null ? (
+            <View style={styles.geoRow}>
+              <MaterialCommunityIcons
+                name="map-marker-check"
+                size={13}
+                color={brand.primary}
+              />
+              <Text variant="bodySmall" style={styles.geoText}>
+                Com localização
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {execution.pending ? (
@@ -516,6 +529,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   bold: { fontWeight: "600" },
   muted: { color: brand.muted },
+  geoRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  geoText: { color: brand.primary, fontSize: 11 },
   positive: { color: brand.primary },
   negative: { color: brand.warning },
   infoGrid: {
