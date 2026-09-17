@@ -124,11 +124,23 @@ por consequência, ficam **congeladas no item da fila**: quando o despacho
 acontecer, horas depois, a posição enviada continua sendo a do trabalho em
 campo, e não a de onde o sinal de internet voltou.
 
-O GPS tem **3 segundos** para responder (`LOCATION_TIMEOUT_MS`). Passado o
-prazo, o apontamento é salvo sem coordenada e a tela explica por quê. Obter
-posição não é instantâneo: com o aparelho recém-ligado, sob mata fechada ou
-dentro de um galpão, a primeira leitura pode levar dezenas de segundos ou nunca
-chegar — e nada disso pode impedir o registro da colheita.
+O prazo do GPS depende de quem está esperando, e por isso são três:
+
+| Momento               | Prazo | Por quê                                                                                                              |
+| :-------------------- | ----: | :------------------------------------------------------------------------------------------------------------------- |
+| Ao abrir o formulário |  25 s | Corre enquanto o usuário digita quantidade e data. Ninguém espera por ela, então o GPS tem tempo real de achar sinal |
+| Botão **Atualizar**   |  15 s | O usuário pediu e vê o indicador girando                                                                             |
+| Ao tocar em salvar    |   5 s | Só se a leitura de abertura falhou. Aqui ele quer o registro gravado, não a coordenada                               |
+
+Passado o prazo, o apontamento é salvo sem coordenada e a tela explica por quê.
+Obter posição não é instantâneo: com o aparelho recém-ligado, sob mata fechada
+ou dentro de um galpão, a primeira leitura pode levar dezenas de segundos ou
+nunca chegar — e nada disso pode impedir o registro da colheita.
+
+**Ao editar um apontamento que já tem posição, nada é capturado.** A tela mostra
+a coordenada gravada, indicando quando foi registrada, e só o botão
+**Atualizar** a substitui. Capturar ao abrir a edição trocaria o lugar da
+colheita pelo lugar onde alguém corrigiu um número.
 
 O prazo é imposto por `Promise.race` em `src/lib/location.ts`, porque o
 `getCurrentPositionAsync` do `expo-location` não aceita timeout: ele resolve

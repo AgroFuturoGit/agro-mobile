@@ -19,6 +19,7 @@ import {
 import { ApiError, parseFieldErrors } from "@/lib/api";
 import {
   formatDate,
+  formatDateTime,
   parseDateInput,
   parseDecimal,
   toIsoDate,
@@ -28,6 +29,9 @@ import {
   describeLocationFailure,
   formatCoordinates,
   isLocationFromAnotherDay,
+  LOCATION_TIMEOUT_BACKGROUND_MS,
+  LOCATION_TIMEOUT_RECAPTURE_MS,
+  LOCATION_TIMEOUT_SUBMIT_MS,
   type LocationResult,
 } from "@/lib/location";
 import type { RootStackParamList } from "@/navigation/types";
@@ -47,11 +51,39 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
     formatDate(execution?.harvestDate ?? toIsoDate()),
   );
   const [submitting, setSubmitting] = useState(false);
+
+  /**
+   * A posição que o apontamento já carrega, quando se está editando. Ela é o
+   * registro de onde a colheita foi apontada em campo — abrir a edição não pode
+   * substituí-la pela posição de agora, que é só onde o aparelho está no momento
+   * de corrigir um número.
+   */
+  const localizacaoSalva: LocationResult | null =
+    execution && execution.latitude !== null && execution.longitude !== null
+      ? {
+          status: "ok",
+          coordinates: {
+            latitude: execution.latitude,
+            longitude: execution.longitude,
+            accuracy: execution.locationAccuracy,
+            recordedAt: execution.locationRecordedAt ?? "",
+          },
+        }
+      : null;
+
   /** `null` enquanto a primeira leitura do GPS não terminou. */
-  const [location, setLocation] = useState<LocationResult | null>(null);
+  const [location, setLocation] = useState<LocationResult | null>(
+    localizacaoSalva,
+  );
   /** O usuário descartou a posição — diferente de o GPS ter falhado. */
   const [locationRemoved, setLocationRemoved] = useState(false);
   const [recapturing, setRecapturing] = useState(false);
+  /**
+   * O usuário mexeu na localização nesta edição (recapturou). Sem isso, salvar
+   * uma correção de quantidade enviaria a posição de novo e reescreveria a
+   * original com o mesmo valor — e, pior, com o carimbo de agora.
+   */
+  const [locationRecaptured, setLocationRecaptured] = useState(false);
   const [errors, setErrors] = useState<{
     actualYield?: string;
     harvestDate?: string;
@@ -62,20 +94,34 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
   // entende o pedido quando ele chega junto da ação que o justifica. A leitura
   // já começa aqui para que, na hora de salvar, a posição normalmente esteja
   // pronta e o botão não precise esperar.
+  //
+  // Quando o apontamento já tem posição, nada é capturado: a tela mostra a que
+  // está gravada, e só o botão "Atualizar" a substitui.
   useEffect(() => {
+    if (localizacaoSalva) return;
+
     let ativo = true;
-    void captureCoordinates().then((resultado) => {
+    void captureCoordinates(LOCATION_TIMEOUT_BACKGROUND_MS).then((resultado) => {
       if (ativo) setLocation(resultado);
     });
     return () => {
       ativo = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** A tela está mostrando a posição gravada, e não uma leitura desta sessão. */
+  const mantendoPosicaoSalva =
+    localizacaoSalva !== null && !locationRecaptured && !locationRemoved;
 
   async function handleRecapture() {
     setRecapturing(true);
     setLocationRemoved(false);
-    setLocation(await captureCoordinates());
+    const nova = await captureCoordinates(LOCATION_TIMEOUT_RECAPTURE_MS);
+    setLocation(nova);
+    // Só conta como recaptura se deu certo: um GPS que falhou não pode apagar a
+    // posição que já estava gravada.
+    if (nova.status === "ok") setLocationRecaptured(true);
     setRecapturing(false);
   }
 
@@ -103,12 +149,19 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
     setErrors({});
     setSubmitting(true);
 
+    // Editar um apontamento que já tem posição não mexe nela: só o botão
+    // "Atualizar" substitui, e "Remover" apaga. Enviar os campos nulos deixa o
+    // backend preservar o que está gravado.
+    const manterPosicaoSalva =
+      localizacaoSalva !== null && !locationRecaptured && !locationRemoved;
+
     // Quem removeu a posição não quer que ela volte por uma nova tentativa.
-    const posicao = locationRemoved
-      ? null
-      : location?.status === "ok"
-        ? location
-        : await captureCoordinates();
+    const posicao =
+      manterPosicaoSalva || locationRemoved
+        ? null
+        : location?.status === "ok"
+          ? location
+          : await captureCoordinates(LOCATION_TIMEOUT_SUBMIT_MS);
 
     if (posicao) setLocation(posicao);
 
@@ -268,6 +321,19 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
           </View>
 
           {/*
+            Diz de quando é a posição em tela. Sem isso, a coordenada gravada em
+            campo e a capturada agora ficam com a mesma aparência, e o usuário
+            não tem como saber qual está prestes a salvar.
+          */}
+          {!locationRemoved && !recapturing && location?.status === "ok" ? (
+            <Text variant="bodySmall" style={styles.locationOrigin}>
+              {mantendoPosicaoSalva
+                ? `Registrada ${location.coordinates.recordedAt ? formatDateTime(location.coordinates.recordedAt) : "no apontamento"}`
+                : "Capturada agora"}
+            </Text>
+          ) : null}
+
+          {/*
             A data da colheita é escolhida pelo usuário e pode ser retroativa,
             mas a posição é sempre a de agora. Quem colhe de manhã e registra à
             noite, em casa, grava a coordenada da casa — este aviso é o que
@@ -287,9 +353,11 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
                 color={brand.warning}
               />
               <Text variant="bodySmall" style={styles.locationWarning}>
-                Esta posição é de hoje, mas a colheita é de{" "}
-                {formatDate(parseDateInput(harvestDate))}. Pode não ser o local
-                da colheita.
+                A posição foi capturada em dia diferente do da colheita
+                {" ("}
+                {formatDate(parseDateInput(harvestDate))}
+                {"). "}
+                Pode não ser o local da colheita.
               </Text>
             </View>
           ) : null}
@@ -359,6 +427,7 @@ const styles = StyleSheet.create({
   locationRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   locationText: { color: brand.muted, flex: 1 },
   locationWarning: { color: brand.warning, flex: 1 },
+  locationOrigin: { color: brand.muted, fontSize: 11, marginLeft: 26 },
   locationActions: { flexDirection: "row", justifyContent: "flex-end" },
   offlineNotice: {
     backgroundColor: "#F1F5F9",

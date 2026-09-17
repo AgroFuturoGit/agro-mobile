@@ -27,15 +27,36 @@ export type LocationResult =
   | { status: LocationFailure };
 
 /**
- * Prazo que o GPS tem para responder antes de o registro seguir sem coordenada.
+ * O prazo do GPS depende de quem está esperando.
  *
- * Obter posição não é instantâneo: com o aparelho recém-ligado, sob mata fechada
- * ou dentro de um galpão, a primeira leitura pode levar dezenas de segundos ou
- * nunca chegar. Esperar sem limite deixaria o botão de salvar girando e
- * impediria o agricultor de registrar a colheita — o oposto do que este app
- * existe para fazer.
+ * Um aparelho recém-ligado, sob mata fechada ou dentro de um galpão pode levar
+ * dezenas de segundos para a primeira leitura — um prazo curto simplesmente
+ * desiste antes de o GPS ter chance. Mas prazo longo só é aceitável enquanto
+ * ninguém está parado olhando para a tela.
+ *
+ * Por isso são três, e não um:
  */
-export const LOCATION_TIMEOUT_MS = 3000;
+
+/**
+ * Leitura que começa junto com o formulário e corre enquanto o usuário digita
+ * quantidade e data. Ninguém espera por ela, então pode ser generosa — é a que
+ * dá ao GPS tempo real de encontrar sinal.
+ */
+export const LOCATION_TIMEOUT_BACKGROUND_MS = 25000;
+
+/**
+ * Recaptura pedida pelo botão. O usuário está olhando, mas pediu de propósito e
+ * vê o indicador girando; aguentar 15 s é razoável quando se acabou de chegar
+ * ao talhão.
+ */
+export const LOCATION_TIMEOUT_RECAPTURE_MS = 15000;
+
+/**
+ * Última tentativa, no toque em salvar, quando a leitura de abertura não deu em
+ * nada. Aqui o usuário quer o registro gravado, não a coordenada — este prazo é
+ * curto de propósito.
+ */
+export const LOCATION_TIMEOUT_SUBMIT_MS = 5000;
 
 /**
  * `getCurrentPositionAsync` não aceita prazo: resolve quando conseguir. O limite
@@ -71,7 +92,7 @@ function comPrazo<T>(
  * salvando o apontamento de qualquer forma.
  */
 export async function captureCoordinates(
-  prazoMs: number = LOCATION_TIMEOUT_MS,
+  prazoMs: number = LOCATION_TIMEOUT_BACKGROUND_MS,
 ): Promise<LocationResult> {
   try {
     // A permissão é pedida aqui, no ato de salvar, e não no boot do app: o
