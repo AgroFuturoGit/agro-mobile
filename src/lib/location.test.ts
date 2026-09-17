@@ -1,6 +1,11 @@
 import * as Location from "expo-location";
 
-import { captureCoordinates, describeLocationFailure } from "@/lib/location";
+import {
+  captureCoordinates,
+  describeLocationFailure,
+  formatCoordinates,
+  isLocationFromAnotherDay,
+} from "@/lib/location";
 
 jest.mock("expo-location", () => ({
   requestForegroundPermissionsAsync: jest.fn(),
@@ -21,8 +26,13 @@ const posicaoAtual = Location.getCurrentPositionAsync as jest.MockedFunction<
 >;
 
 /** Só o que `captureCoordinates` lê do retorno do Expo. */
-function leitura(latitude: number, longitude: number) {
-  return { coords: { latitude, longitude } } as Awaited<
+function leitura(
+  latitude: number,
+  longitude: number,
+  accuracy: number | null = 8,
+  timestamp = Date.UTC(2026, 8, 17, 12, 0),
+) {
+  return { coords: { latitude, longitude, accuracy }, timestamp } as Awaited<
     ReturnType<typeof Location.getCurrentPositionAsync>
   >;
 }
@@ -43,9 +53,9 @@ describe("captureCoordinates", () => {
   it("devolve as coordenadas quando o GPS responde", async () => {
     posicaoAtual.mockResolvedValue(leitura(-9.7521, -36.6612));
 
-    await expect(captureCoordinates()).resolves.toEqual({
+    await expect(captureCoordinates()).resolves.toMatchObject({
       status: "ok",
-      coordinates: { latitude: -9.7521, longitude: -36.6612 },
+      coordinates: { latitude: -9.7521, longitude: -36.6612, accuracy: 8 },
     });
   });
 
@@ -60,7 +70,7 @@ describe("captureCoordinates", () => {
   it("preserva a coordenada zero, que é uma posição válida", async () => {
     posicaoAtual.mockResolvedValue(leitura(0, 0));
 
-    await expect(captureCoordinates()).resolves.toEqual({
+    await expect(captureCoordinates()).resolves.toMatchObject({
       status: "ok",
       coordinates: { latitude: 0, longitude: 0 },
     });
@@ -129,5 +139,70 @@ describe("describeLocationFailure", () => {
     expect(describeLocationFailure("disabled")).toContain("desligada");
     expect(describeLocationFailure("timeout")).toContain("não respondeu");
     expect(describeLocationFailure("error")).toBe("Salvo sem localização.");
+  });
+});
+
+describe("dados que acompanham a coordenada", () => {
+  it("guarda a precisão informada pelo GPS", async () => {
+    posicaoAtual.mockResolvedValue(leitura(-9.75, -36.66, 42));
+
+    const r = await captureCoordinates();
+
+    expect(r).toMatchObject({ coordinates: { accuracy: 42 } });
+  });
+
+  it("aceita leitura sem precisão conhecida", async () => {
+    posicaoAtual.mockResolvedValue(leitura(-9.75, -36.66, null));
+
+    const r = await captureCoordinates();
+
+    expect(r).toMatchObject({ coordinates: { accuracy: null } });
+  });
+
+  it("guarda quando o GPS obteve a posição, não quando foi salvo", async () => {
+    const quando = Date.UTC(2026, 8, 17, 9, 30);
+    posicaoAtual.mockResolvedValue(leitura(-9.75, -36.66, 8, quando));
+
+    const r = await captureCoordinates();
+
+    expect(r).toMatchObject({
+      coordinates: { recordedAt: new Date(quando).toISOString() },
+    });
+  });
+});
+
+describe("formatCoordinates", () => {
+  const base = { latitude: -9.7521, longitude: -36.6612, recordedAt: "" };
+
+  it("mostra o par com seis casas e a precisão arredondada", () => {
+    expect(formatCoordinates({ ...base, accuracy: 8.4 })).toBe(
+      "-9.752100, -36.661200 · ±8 m",
+    );
+  });
+
+  it("omite a precisão quando o GPS não a informou", () => {
+    expect(formatCoordinates({ ...base, accuracy: null })).toBe(
+      "-9.752100, -36.661200",
+    );
+  });
+});
+
+describe("isLocationFromAnotherDay", () => {
+  it("acusa a posição capturada em dia diferente do da colheita", () => {
+    // O caso real: colheu de manhã no talhão, registrou à noite em casa.
+    expect(
+      isLocationFromAnotherDay("2026-09-17T23:10:00.000Z", "2026-09-12"),
+    ).toBe(true);
+  });
+
+  it("não acusa quando captura e colheita são do mesmo dia", () => {
+    expect(
+      isLocationFromAnotherDay("2026-09-17T09:30:00.000Z", "2026-09-17"),
+    ).toBe(false);
+  });
+
+  it("não acusa quando alguma das datas é inválida", () => {
+    expect(isLocationFromAnotherDay("", "2026-09-17")).toBe(false);
+    expect(isLocationFromAnotherDay("2026-09-17T09:30:00.000Z", "")).toBe(false);
   });
 });

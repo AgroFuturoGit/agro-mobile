@@ -49,6 +49,10 @@ export type ProductionExecution = {
    */
   latitude: number | null;
   longitude: number | null;
+  /** Raio de erro da leitura, em metros. */
+  locationAccuracy: number | null;
+  /** Quando o GPS obteve a posição — não quando o apontamento foi salvo. */
+  locationRecordedAt: string | null;
   createdAt: string | null;
   /** Ver `ProductionPlan.updatedAt`. */
   updatedAt: string | null;
@@ -90,6 +94,10 @@ export type ProductionExecutionWritePayload = {
    */
   latitude?: number | null;
   longitude?: number | null;
+  locationAccuracy?: number | null;
+  locationRecordedAt?: string | null;
+  /** Apaga a posição gravada. Nulo significa "não mexer", então remover exige sinal próprio. */
+  clearLocation?: boolean;
 };
 
 // ----- Respostas da API -----
@@ -120,6 +128,8 @@ type ExecutionApiResponse = {
   harvestDate: string | null;
   latitude: number | string | null;
   longitude: number | string | null;
+  locationAccuracy: number | string | null;
+  locationRecordedAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -179,6 +189,8 @@ function mapExecution(raw: ExecutionApiResponse): ProductionExecution {
     harvestDate: raw.harvestDate ?? null,
     latitude: optionalNum(raw.latitude),
     longitude: optionalNum(raw.longitude),
+    locationAccuracy: optionalNum(raw.locationAccuracy),
+    locationRecordedAt: raw.locationRecordedAt ?? null,
     createdAt: raw.createdAt ?? null,
     updatedAt: raw.updatedAt ?? null,
     pending: null,
@@ -340,6 +352,8 @@ export function createProductionExecution(
     harvestDate: payload.harvestDate,
     latitude: payload.latitude ?? null,
     longitude: payload.longitude ?? null,
+    locationAccuracy: payload.locationAccuracy ?? null,
+    locationRecordedAt: payload.locationRecordedAt ?? null,
     createdAt: null,
     updatedAt: null,
     pending: "create",
@@ -375,9 +389,18 @@ export function updateProductionExecution(
     ...execution,
     actualYield: payload.actualYield,
     harvestDate: payload.harvestDate,
-    // Edição sem GPS preserva a posição já registrada, como no backend.
-    latitude: payload.latitude ?? execution.latitude,
-    longitude: payload.longitude ?? execution.longitude,
+    // Espelha a regra do backend: apagar é explícito, recapturar substitui a
+    // leitura inteira, e não mandar nada preserva o que já estava lá.
+    latitude: payload.clearLocation ? null : (payload.latitude ?? execution.latitude),
+    longitude: payload.clearLocation
+      ? null
+      : (payload.longitude ?? execution.longitude),
+    locationAccuracy: payload.clearLocation
+      ? null
+      : (payload.locationAccuracy ?? execution.locationAccuracy),
+    locationRecordedAt: payload.clearLocation
+      ? null
+      : (payload.locationRecordedAt ?? execution.locationRecordedAt),
     pending: "update",
   };
 

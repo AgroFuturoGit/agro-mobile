@@ -26,6 +26,8 @@ import {
 import {
   captureCoordinates,
   describeLocationFailure,
+  formatCoordinates,
+  isLocationFromAnotherDay,
   type LocationResult,
 } from "@/lib/location";
 import type { RootStackParamList } from "@/navigation/types";
@@ -47,6 +49,9 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
   const [submitting, setSubmitting] = useState(false);
   /** `null` enquanto a primeira leitura do GPS não terminou. */
   const [location, setLocation] = useState<LocationResult | null>(null);
+  /** O usuário descartou a posição — diferente de o GPS ter falhado. */
+  const [locationRemoved, setLocationRemoved] = useState(false);
+  const [recapturing, setRecapturing] = useState(false);
   const [errors, setErrors] = useState<{
     actualYield?: string;
     harvestDate?: string;
@@ -66,6 +71,17 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
       ativo = false;
     };
   }, []);
+
+  async function handleRecapture() {
+    setRecapturing(true);
+    setLocationRemoved(false);
+    setLocation(await captureCoordinates());
+    setRecapturing(false);
+  }
+
+  function handleRemoveLocation() {
+    setLocationRemoved(true);
+  }
 
   async function handleSubmit() {
     const parsedYield = parseDecimal(actualYield);
@@ -87,17 +103,27 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
     setErrors({});
     setSubmitting(true);
 
-    // Se a leitura de abertura falhou, vale uma última tentativa: o usuário
-    // pode ter saído do galpão ou ligado a localização nesse meio-tempo.
-    const posicao =
-      location?.status === "ok" ? location : await captureCoordinates();
-    setLocation(posicao);
+    // Quem removeu a posição não quer que ela volte por uma nova tentativa.
+    const posicao = locationRemoved
+      ? null
+      : location?.status === "ok"
+        ? location
+        : await captureCoordinates();
+
+    if (posicao) setLocation(posicao);
+
+    const coords = posicao?.status === "ok" ? posicao.coordinates : null;
 
     const payload = {
       actualYield: parsedYield as number,
       harvestDate: parsedDate as string,
-      latitude: posicao.status === "ok" ? posicao.coordinates.latitude : null,
-      longitude: posicao.status === "ok" ? posicao.coordinates.longitude : null,
+      latitude: coords?.latitude ?? null,
+      longitude: coords?.longitude ?? null,
+      locationAccuracy: coords?.accuracy ?? null,
+      locationRecordedAt: coords?.recordedAt ?? null,
+      // Só faz sentido ao editar: sinaliza a remoção deliberada de uma posição
+      // que já estava gravada.
+      clearLocation: isEditing && locationRemoved,
     };
 
     try {
@@ -202,31 +228,95 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
           decide se vale sair do galpão para registrar com posição ou se salva
           assim mesmo. Nenhum dos casos bloqueia o botão.
         */}
-        <View style={styles.locationRow}>
-          <MaterialCommunityIcons
-            name={
-              location === null
-                ? "crosshairs-gps"
-                : location.status === "ok"
-                  ? "map-marker-check"
-                  : "map-marker-off"
-            }
-            size={18}
-            color={
-              location === null
-                ? brand.muted
-                : location.status === "ok"
-                  ? brand.primary
-                  : brand.warning
-            }
-          />
-          <Text variant="bodySmall" style={styles.locationText}>
-            {location === null
-              ? "Obtendo a localização..."
-              : location.status === "ok"
-                ? "Localização capturada — será registrada junto do apontamento."
-                : describeLocationFailure(location.status)}
-          </Text>
+        {/*
+          O estado do GPS aparece antes de salvar, e não depois: o agricultor vê
+          a coordenada e a precisão, e decide se aquela posição descreve mesmo o
+          lugar da colheita. Nenhum caminho aqui bloqueia o salvamento.
+        */}
+        <View style={styles.locationBox}>
+          <View style={styles.locationRow}>
+            <MaterialCommunityIcons
+              name={
+                locationRemoved
+                  ? "map-marker-off"
+                  : location === null || recapturing
+                    ? "crosshairs-gps"
+                    : location.status === "ok"
+                      ? "map-marker-check"
+                      : "map-marker-off"
+              }
+              size={18}
+              color={
+                locationRemoved
+                  ? brand.muted
+                  : location === null || recapturing
+                    ? brand.muted
+                    : location.status === "ok"
+                      ? brand.primary
+                      : brand.warning
+              }
+            />
+            <Text variant="bodySmall" style={styles.locationText}>
+              {locationRemoved
+                ? "Sem localização — este apontamento será salvo sem posição."
+                : recapturing || location === null
+                  ? "Obtendo a localização..."
+                  : location.status === "ok"
+                    ? formatCoordinates(location.coordinates)
+                    : describeLocationFailure(location.status)}
+            </Text>
+          </View>
+
+          {/*
+            A data da colheita é escolhida pelo usuário e pode ser retroativa,
+            mas a posição é sempre a de agora. Quem colhe de manhã e registra à
+            noite, em casa, grava a coordenada da casa — este aviso é o que
+            torna isso visível a tempo de corrigir.
+          */}
+          {!locationRemoved &&
+          location?.status === "ok" &&
+          parseDateInput(harvestDate) &&
+          isLocationFromAnotherDay(
+            location.coordinates.recordedAt,
+            parseDateInput(harvestDate) as string,
+          ) ? (
+            <View style={styles.locationRow}>
+              <MaterialCommunityIcons
+                name="alert-outline"
+                size={16}
+                color={brand.warning}
+              />
+              <Text variant="bodySmall" style={styles.locationWarning}>
+                Esta posição é de hoje, mas a colheita é de{" "}
+                {formatDate(parseDateInput(harvestDate))}. Pode não ser o local
+                da colheita.
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.locationActions}>
+            <Button
+              mode="text"
+              compact
+              icon="crosshairs-gps"
+              onPress={handleRecapture}
+              disabled={submitting || recapturing}
+            >
+              Atualizar
+            </Button>
+            {!locationRemoved && location?.status === "ok" ? (
+              <Button
+                mode="text"
+                compact
+                icon="close"
+                textColor={brand.muted}
+                onPress={handleRemoveLocation}
+                disabled={submitting || recapturing}
+              >
+                Remover
+              </Button>
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.actions}>
@@ -258,13 +348,18 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, gap: spacing.md },
   bold: { fontWeight: "600" },
   muted: { color: brand.muted },
-  locationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
+  locationBox: {
+    borderWidth: 1,
+    borderColor: brand.border,
+    borderRadius: 8,
+    padding: spacing.md,
     marginBottom: spacing.md,
+    gap: spacing.xs,
   },
+  locationRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   locationText: { color: brand.muted, flex: 1 },
+  locationWarning: { color: brand.warning, flex: 1 },
+  locationActions: { flexDirection: "row", justifyContent: "flex-end" },
   offlineNotice: {
     backgroundColor: "#F1F5F9",
     padding: spacing.md,

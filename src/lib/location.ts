@@ -3,6 +3,17 @@ import * as Location from "expo-location";
 export type Coordinates = {
   latitude: number;
   longitude: number;
+  /**
+   * Raio de erro da leitura, em metros. É o que separa uma posição que localiza
+   * um talhão de uma que só aponta a cidade — por isso vai junto do par, e não
+   * como detalhe opcional.
+   */
+  accuracy: number | null;
+  /**
+   * Quando o GPS obteve a posição. Diferente do momento em que o apontamento é
+   * salvo: o registro pode ser preenchido horas depois, em outro lugar.
+   */
+  recordedAt: string;
 };
 
 /**
@@ -86,6 +97,8 @@ export async function captureCoordinates(
       coordinates: {
         latitude: leitura.coords.latitude,
         longitude: leitura.coords.longitude,
+        accuracy: leitura.coords.accuracy ?? null,
+        recordedAt: new Date(leitura.timestamp).toISOString(),
       },
     };
   } catch {
@@ -105,4 +118,29 @@ export function describeLocationFailure(motivo: LocationFailure): string {
     default:
       return "Salvo sem localização.";
   }
+}
+
+/** `-9.752100, -36.661200 · ±8 m` — o formato que a tela mostra. */
+export function formatCoordinates(coordinates: Coordinates): string {
+  const par = `${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)}`;
+  if (coordinates.accuracy === null) return par;
+  return `${par} · ±${Math.round(coordinates.accuracy)} m`;
+}
+
+/**
+ * A posição foi capturada num dia diferente do da colheita?
+ *
+ * O app captura onde o telefone está no momento de salvar, mas a data da
+ * colheita é escolhida pelo usuário e pode ser retroativa. Quem colhe de manhã
+ * e registra à noite, em casa, grava a coordenada da casa — e nada no dado
+ * denuncia isso. Comparar as duas datas é o que permite avisar.
+ */
+export function isLocationFromAnotherDay(
+  recordedAt: string,
+  harvestDate: string,
+): boolean {
+  const captura = recordedAt.slice(0, 10);
+  const colheita = harvestDate.slice(0, 10);
+  if (captura.length !== 10 || colheita.length !== 10) return false;
+  return captura !== colheita;
 }

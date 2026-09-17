@@ -134,6 +134,22 @@ O prazo é imposto por `Promise.race` em `src/lib/location.ts`, porque o
 `getCurrentPositionAsync` do `expo-location` não aceita timeout: ele resolve
 quando conseguir.
 
+Junto do par de coordenadas vão a **precisão** (raio de erro em metros, que o
+GPS informa) e o **instante da leitura**. A precisão é o que separa uma posição
+que localiza o talhão de uma que só aponta a cidade; sem ela as duas entrariam
+no banco indistinguíveis.
+
+O formulário mostra a coordenada, a precisão e dois botões — **Atualizar**, que
+recaptura ali na hora, e **Remover**, que salva deliberadamente sem posição.
+A coordenada nunca é digitada: ela é sempre leitura do GPS, e portanto evidência
+de onde o registro foi gerado, não declaração de onde alguém diz que foi.
+
+**O aviso de descompasso de data** existe porque a data da colheita é escolhida
+pelo usuário e pode ser retroativa, enquanto a posição é sempre a de agora. Quem
+colhe de manhã e registra à noite, em casa, grava a coordenada da casa — e nada
+no dado denunciaria isso. Quando as duas datas diferem, a tela avisa antes de
+salvar, e o usuário decide entre recapturar, remover ou manter.
+
 ## Como o offline funciona
 
 Três peças, em `src/lib`:

@@ -37,6 +37,8 @@ function execution(
     harvestDate: "2026-08-01",
     latitude: null,
     longitude: null,
+    locationAccuracy: null,
+    locationRecordedAt: null,
     updatedAt: null,
     createdAt: "2026-08-01",
     pending: null,

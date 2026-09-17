@@ -41,6 +41,7 @@ import { useCachedQuery } from "@/hooks/use-cached-query";
 import { ApiError } from "@/lib/api";
 import { CacheKeys } from "@/lib/cache";
 import { formatDate, formatNumber } from "@/lib/format";
+import { formatCoordinates } from "@/lib/location";
 import { isLocalId } from "@/lib/outbox";
 import type {
   PlansStackParamList,
@@ -443,7 +444,10 @@ function ExecutionRow({
           <Text variant="bodySmall" style={styles.muted}>
             Colheita em {formatDate(execution.harvestDate)}
           </Text>
-          {/* Sinaliza rastreabilidade espacial: este registro sabe onde foi feito. */}
+          {/*
+            Mostra a coordenada e a precisão, não só que existe: sem o raio de
+            erro não dá para saber se a posição localiza o talhão ou a cidade.
+          */}
           {execution.latitude !== null && execution.longitude !== null ? (
             <View style={styles.geoRow}>
               <MaterialCommunityIcons
@@ -452,7 +456,12 @@ function ExecutionRow({
                 color={brand.primary}
               />
               <Text variant="bodySmall" style={styles.geoText}>
-                Com localização
+                {formatCoordinates({
+                  latitude: execution.latitude,
+                  longitude: execution.longitude,
+                  accuracy: execution.locationAccuracy,
+                  recordedAt: execution.locationRecordedAt ?? "",
+                })}
               </Text>
             </View>
           ) : null}
