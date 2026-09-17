@@ -1,11 +1,14 @@
 import {
   canReceiveExecutions,
   computeComparison,
+  createProductionExecution,
   overlayExecutions,
   overlayPlans,
   type ProductionExecution,
   type ProductionPlan,
+  updateProductionExecution,
 } from "@/domain/production";
+import { mutate } from "@/lib/mutate";
 import type { OutboxEntry, OutboxKind } from "@/lib/outbox";
 
 function plan(
@@ -271,5 +274,142 @@ describe("canReceiveExecutions", () => {
     expect(
       canReceiveExecutions(plan("d290f1ee-6c54-4b01-90e6-d701748f0851")),
     ).toBe(true);
+  });
+});
+
+// A fila é o caminho que o apontamento percorre quando não há rede — é nela que
+// o payload aparece como será despachado depois.
+jest.mock("@/lib/mutate", () => ({
+  mutate: jest.fn(),
+}));
+
+jest.mock("@/lib/net", () => ({
+  getConnectivity: () => ({ isConnected: false, isInternetReachable: false, type: "none" }),
+  isProbablyOnline: () => false,
+}));
+
+const mutateMock = mutate as jest.MockedFunction<typeof mutate>;
+
+/** O item que a fila recebeu na última chamada. */
+function itemEnfileirado() {
+  const chamada = mutateMock.mock.calls[0];
+  if (!chamada) throw new Error("mutate não foi chamado");
+  return chamada[0].queue;
+}
+
+/** O corpo que seria enviado à API, como a fila o congelou. */
+function corpoEnfileirado(): Record<string, unknown> {
+  return itemEnfileirado().body as Record<string, unknown>;
+}
+
+/** O que a tela mostra enquanto o item não sincroniza. */
+function snapshotEnfileirado(): ProductionExecution {
+  return itemEnfileirado().snapshot as ProductionExecution;
+}
+
+describe("payload do apontamento", () => {
+  beforeEach(() => {
+    mutateMock.mockClear();
+    mutateMock.mockResolvedValue({ synced: false, data: null, entry: null });
+  });
+
+  describe("na criação", () => {
+    it("leva as coordenadas, a precisão e o instante da leitura", async () => {
+      await createProductionExecution("plan-1", {
+        actualYield: 30,
+        harvestDate: "2026-09-17",
+        latitude: -9.7521,
+        longitude: -36.6612,
+        locationAccuracy: 8,
+        locationRecordedAt: "2026-09-17T12:00:00.000Z",
+      });
+
+      expect(corpoEnfileirado()).toMatchObject({
+        actualYield: 30,
+        latitude: -9.7521,
+        longitude: -36.6612,
+        locationAccuracy: 8,
+        locationRecordedAt: "2026-09-17T12:00:00.000Z",
+      });
+    });
+
+    it("é aceito sem dados geográficos, com os campos nulos", async () => {
+      await createProductionExecution("plan-1", {
+        actualYield: 30,
+        harvestDate: "2026-09-17",
+        latitude: null,
+        longitude: null,
+      });
+
+      const corpo = corpoEnfileirado();
+      expect(corpo.actualYield).toBe(30);
+      expect(corpo.latitude).toBeNull();
+      expect(corpo.longitude).toBeNull();
+    });
+
+    it("guarda a posição no snapshot, que é o que a tela mostra até sincronizar", async () => {
+      await createProductionExecution("plan-1", {
+        actualYield: 30,
+        harvestDate: "2026-09-17",
+        latitude: -9.7521,
+        longitude: -36.6612,
+        locationAccuracy: 8,
+      });
+
+      const snapshot = snapshotEnfileirado();
+      expect(snapshot.latitude).toBe(-9.7521);
+      expect(snapshot.locationAccuracy).toBe(8);
+    });
+  });
+
+  describe("na edição", () => {
+    const existente = execution("exec-1", {
+      latitude: -9.7521,
+      longitude: -36.6612,
+      locationAccuracy: 8,
+      locationRecordedAt: "2026-09-10T09:00:00.000Z",
+    });
+
+    it("preserva no snapshot a posição gravada quando a edição não traz outra", async () => {
+      await updateProductionExecution(existente, {
+        actualYield: 45,
+        harvestDate: "2026-09-17",
+      });
+
+      const snapshot = snapshotEnfileirado();
+      expect(snapshot.latitude).toBe(-9.7521);
+      expect(snapshot.locationAccuracy).toBe(8);
+      expect(snapshot.actualYield).toBe(45);
+    });
+
+    it("substitui a leitura inteira quando a edição traz posição nova", async () => {
+      await updateProductionExecution(existente, {
+        actualYield: 45,
+        harvestDate: "2026-09-17",
+        latitude: -9.8,
+        longitude: -36.7,
+        locationAccuracy: 5,
+        locationRecordedAt: "2026-09-17T14:00:00.000Z",
+      });
+
+      const snapshot = snapshotEnfileirado();
+      expect(snapshot.latitude).toBe(-9.8);
+      expect(snapshot.locationAccuracy).toBe(5);
+      expect(snapshot.locationRecordedAt).toBe("2026-09-17T14:00:00.000Z");
+    });
+
+    it("apaga a posição inteira quando a edição pede clearLocation", async () => {
+      await updateProductionExecution(existente, {
+        actualYield: 45,
+        harvestDate: "2026-09-17",
+        clearLocation: true,
+      });
+
+      const snapshot = snapshotEnfileirado();
+      expect(snapshot.latitude).toBeNull();
+      expect(snapshot.longitude).toBeNull();
+      expect(snapshot.locationAccuracy).toBeNull();
+      expect(snapshot.locationRecordedAt).toBeNull();
+    });
   });
 });
