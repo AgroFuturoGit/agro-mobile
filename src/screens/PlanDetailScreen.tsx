@@ -40,8 +40,12 @@ import {
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { ApiError } from "@/lib/api";
 import { CacheKeys } from "@/lib/cache";
-import { formatDate, formatNumber } from "@/lib/format";
-import { formatCoordinates } from "@/lib/location";
+import {
+  formatDate,
+  formatDateTime,
+  formatNumber,
+} from "@/lib/format";
+import { formatCoordinates, isLocationFromAnotherDay } from "@/lib/location";
 import { isLocalId } from "@/lib/outbox";
 import type {
   PlansStackParamList,
@@ -465,6 +469,24 @@ function ExecutionRow({
               </Text>
             </View>
           ) : null}
+
+          {/*
+            Quando a leitura foi feita. Uma posição capturada dias depois da
+            colheita descreve outro lugar, e só a data revela isso — a
+            coordenada sozinha parece sempre igualmente confiável.
+          */}
+          {execution.latitude !== null && execution.locationRecordedAt ? (
+            <Text variant="bodySmall" style={styles.geoWhen}>
+              Registrada {formatDateTime(execution.locationRecordedAt)}
+              {execution.harvestDate &&
+              isLocationFromAnotherDay(
+                execution.locationRecordedAt,
+                execution.harvestDate,
+              )
+                ? " · dia diferente da colheita"
+                : ""}
+            </Text>
+          ) : null}
         </View>
 
         {execution.pending ? (
@@ -540,6 +562,7 @@ const styles = StyleSheet.create({
   muted: { color: brand.muted },
   geoRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   geoText: { color: brand.primary, fontSize: 11 },
+  geoWhen: { color: brand.muted, fontSize: 11, marginLeft: 17 },
   positive: { color: brand.primary },
   negative: { color: brand.warning },
   infoGrid: {
