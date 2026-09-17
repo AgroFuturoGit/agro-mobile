@@ -45,7 +45,11 @@ import {
   formatDateTime,
   formatNumber,
 } from "@/lib/format";
-import { formatCoordinates, isLocationFromAnotherDay } from "@/lib/location";
+import {
+  formatCoordinates,
+  isLocationFromAnotherDay,
+  openInMaps,
+} from "@/lib/location";
 import { isLocalId } from "@/lib/outbox";
 import type {
   PlansStackParamList,
@@ -459,7 +463,21 @@ function ExecutionRow({
                 size={13}
                 color={brand.primary}
               />
-              <Text variant="bodySmall" style={styles.geoText}>
+              <Text
+                variant="bodySmall"
+                style={styles.geoLink}
+                onPress={() =>
+                  void openInMaps(
+                    {
+                      latitude: execution.latitude as number,
+                      longitude: execution.longitude as number,
+                      accuracy: execution.locationAccuracy,
+                      recordedAt: execution.locationRecordedAt ?? "",
+                    },
+                    `Colheita de ${formatDate(execution.harvestDate)}`,
+                  )
+                }
+              >
                 {formatCoordinates({
                   latitude: execution.latitude,
                   longitude: execution.longitude,
@@ -467,6 +485,11 @@ function ExecutionRow({
                   recordedAt: execution.locationRecordedAt ?? "",
                 })}
               </Text>
+              <MaterialCommunityIcons
+                name="open-in-new"
+                size={12}
+                color={brand.primary}
+              />
             </View>
           ) : null}
 
@@ -562,6 +585,11 @@ const styles = StyleSheet.create({
   muted: { color: brand.muted },
   geoRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   geoText: { color: brand.primary, fontSize: 11 },
+  geoLink: {
+    color: brand.primary,
+    fontSize: 11,
+    textDecorationLine: "underline",
+  },
   geoWhen: { color: brand.muted, fontSize: 11, marginLeft: 17 },
   positive: { color: brand.primary },
   negative: { color: brand.warning },

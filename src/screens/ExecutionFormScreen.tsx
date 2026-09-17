@@ -26,6 +26,7 @@ import {
 } from "@/lib/format";
 import {
   captureCoordinates,
+  type Coordinates,
   describeLocationFailure,
   formatCoordinates,
   isLocationFromAnotherDay,
@@ -33,6 +34,7 @@ import {
   LOCATION_TIMEOUT_RECAPTURE_MS,
   LOCATION_TIMEOUT_SUBMIT_MS,
   type LocationResult,
+  openInMaps,
 } from "@/lib/location";
 import type { RootStackParamList } from "@/navigation/types";
 import { brand, spacing } from "@/theme";
@@ -363,6 +365,22 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
           ) : null}
 
           <View style={styles.locationActions}>
+            {!locationRemoved && location?.status === "ok" ? (
+              <Button
+                mode="text"
+                compact
+                icon="map-search-outline"
+                onPress={() =>
+                  void openInMaps(
+                    (location as { coordinates: Coordinates }).coordinates,
+                    "Local do apontamento",
+                  )
+                }
+                disabled={submitting || recapturing}
+              >
+                Ver no mapa
+              </Button>
+            ) : null}
             <Button
               mode="text"
               compact

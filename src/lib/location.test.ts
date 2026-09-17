@@ -1,3 +1,5 @@
+import { Linking } from "react-native";
+
 import * as Location from "expo-location";
 
 import {
@@ -5,7 +7,13 @@ import {
   describeLocationFailure,
   formatCoordinates,
   isLocationFromAnotherDay,
+  openInMaps,
 } from "@/lib/location";
+
+jest.mock("react-native", () => ({
+  Platform: { OS: "android" },
+  Linking: { canOpenURL: jest.fn(), openURL: jest.fn() },
+}));
 
 jest.mock("expo-location", () => ({
   requestForegroundPermissionsAsync: jest.fn(),
@@ -204,5 +212,54 @@ describe("isLocationFromAnotherDay", () => {
   it("não acusa quando alguma das datas é inválida", () => {
     expect(isLocationFromAnotherDay("", "2026-09-17")).toBe(false);
     expect(isLocationFromAnotherDay("2026-09-17T09:30:00.000Z", "")).toBe(false);
+  });
+});
+
+describe("openInMaps", () => {
+  const podeAbrir = Linking.canOpenURL as jest.MockedFunction<
+    typeof Linking.canOpenURL
+  >;
+  const abrir = Linking.openURL as jest.MockedFunction<typeof Linking.openURL>;
+  const coords = {
+    latitude: -9.7521,
+    longitude: -36.6612,
+    accuracy: 8,
+    recordedAt: "",
+  };
+
+  beforeEach(() => {
+    podeAbrir.mockReset();
+    abrir.mockReset().mockResolvedValue(true);
+  });
+
+  /** O endereço da última chamada, com a checagem que o TypeScript exige. */
+  function enderecoAberto(): string {
+    const chamada = abrir.mock.calls[0];
+    if (!chamada) throw new Error("Linking.openURL não foi chamado");
+    return chamada[0];
+  }
+
+  it("usa o app de mapas do aparelho quando há um instalado", async () => {
+    podeAbrir.mockResolvedValue(true);
+
+    await expect(openInMaps(coords, "Colheita")).resolves.toBe(true);
+    expect(enderecoAberto()).toContain("geo:0,0?q=-9.7521,-36.6612");
+  });
+
+  it("cai no mapa web quando nenhum app atende o esquema", async () => {
+    podeAbrir.mockResolvedValue(false);
+
+    await openInMaps(coords);
+
+    expect(enderecoAberto()).toBe(
+      "https://www.google.com/maps/search/?api=1&query=-9.7521,-36.6612",
+    );
+  });
+
+  it("não lança quando não há como abrir nada", async () => {
+    podeAbrir.mockResolvedValue(false);
+    abrir.mockRejectedValue(new Error("sem aplicativo"));
+
+    await expect(openInMaps(coords)).resolves.toBe(false);
   });
 });

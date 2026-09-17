@@ -1,3 +1,5 @@
+import { Linking, Platform } from "react-native";
+
 import * as Location from "expo-location";
 
 export type Coordinates = {
@@ -164,4 +166,41 @@ export function isLocationFromAnotherDay(
   const colheita = harvestDate.slice(0, 10);
   if (captura.length !== 10 || colheita.length !== 10) return false;
   return captura !== colheita;
+}
+
+/**
+ * Abre a posição no aplicativo de mapas do aparelho.
+ *
+ * Deliberadamente não embute um mapa: o app é offline-first, e tiles de mapa
+ * exigem rede — justamente o que falta em campo. Delegar ao aplicativo instalado
+ * aproveita as regiões que o usuário já tenha baixado, e não custa dependência
+ * nova, chave de API nem rebuild.
+ *
+ * Os esquemas `geo:` e `maps:` são específicos de cada plataforma; o endereço
+ * web cobre o caso de nenhum dos dois ser atendido.
+ */
+export async function openInMaps(
+  coordinates: Coordinates,
+  label = "Apontamento",
+): Promise<boolean> {
+  const { latitude, longitude } = coordinates;
+  const par = `${latitude},${longitude}`;
+
+  const nativo =
+    Platform.OS === "ios"
+      ? `maps:0,0?q=${encodeURIComponent(label)}@${par}`
+      : `geo:0,0?q=${par}(${encodeURIComponent(label)})`;
+
+  const web = `https://www.google.com/maps/search/?api=1&query=${par}`;
+
+  try {
+    if (await Linking.canOpenURL(nativo)) {
+      await Linking.openURL(nativo);
+      return true;
+    }
+    await Linking.openURL(web);
+    return true;
+  } catch {
+    return false;
+  }
 }

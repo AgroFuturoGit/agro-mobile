@@ -137,6 +137,12 @@ Obter posição não é instantâneo: com o aparelho recém-ligado, sob mata fec
 ou dentro de um galpão, a primeira leitura pode levar dezenas de segundos ou
 nunca chegar — e nada disso pode impedir o registro da colheita.
 
+Um toque na coordenada — na tela de detalhe ou no botão **Ver no mapa** do
+formulário — abre a posição no aplicativo de mapas do aparelho. Não há mapa
+embutido de propósito: tiles exigem rede, justamente o que falta em campo.
+Delegar ao aplicativo instalado aproveita as regiões que o usuário já baixou, e
+não custa dependência nova, chave de API nem rebuild do APK.
+
 **Ao editar um apontamento que já tem posição, nada é capturado.** A tela mostra
 a coordenada gravada, indicando quando foi registrada, e só o botão
 **Atualizar** a substitui. Capturar ao abrir a edição trocaria o lugar da
