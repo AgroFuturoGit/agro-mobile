@@ -40,7 +40,16 @@ import {
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import { ApiError } from "@/lib/api";
 import { CacheKeys } from "@/lib/cache";
-import { formatDate, formatNumber } from "@/lib/format";
+import {
+  formatDate,
+  formatDateTime,
+  formatNumber,
+} from "@/lib/format";
+import {
+  formatCoordinates,
+  isLocationFromAnotherDay,
+  openInMaps,
+} from "@/lib/location";
 import { isLocalId } from "@/lib/outbox";
 import type {
   PlansStackParamList,
@@ -443,6 +452,64 @@ function ExecutionRow({
           <Text variant="bodySmall" style={styles.muted}>
             Colheita em {formatDate(execution.harvestDate)}
           </Text>
+          {/*
+            Mostra a coordenada e a precisão, não só que existe: sem o raio de
+            erro não dá para saber se a posição localiza o talhão ou a cidade.
+          */}
+          {execution.latitude !== null && execution.longitude !== null ? (
+            <View style={styles.geoRow}>
+              <MaterialCommunityIcons
+                name="map-marker-check"
+                size={13}
+                color={brand.primary}
+              />
+              <Text
+                variant="bodySmall"
+                style={styles.geoLink}
+                onPress={() =>
+                  void openInMaps(
+                    {
+                      latitude: execution.latitude as number,
+                      longitude: execution.longitude as number,
+                      accuracy: execution.locationAccuracy,
+                      recordedAt: execution.locationRecordedAt ?? "",
+                    },
+                    `Colheita de ${formatDate(execution.harvestDate)}`,
+                  )
+                }
+              >
+                {formatCoordinates({
+                  latitude: execution.latitude,
+                  longitude: execution.longitude,
+                  accuracy: execution.locationAccuracy,
+                  recordedAt: execution.locationRecordedAt ?? "",
+                })}
+              </Text>
+              <MaterialCommunityIcons
+                name="open-in-new"
+                size={12}
+                color={brand.primary}
+              />
+            </View>
+          ) : null}
+
+          {/*
+            Quando a leitura foi feita. Uma posição capturada dias depois da
+            colheita descreve outro lugar, e só a data revela isso — a
+            coordenada sozinha parece sempre igualmente confiável.
+          */}
+          {execution.latitude !== null && execution.locationRecordedAt ? (
+            <Text variant="bodySmall" style={styles.geoWhen}>
+              Registrada {formatDateTime(execution.locationRecordedAt)}
+              {execution.harvestDate &&
+              isLocationFromAnotherDay(
+                execution.locationRecordedAt,
+                execution.harvestDate,
+              )
+                ? " · dia diferente da colheita"
+                : ""}
+            </Text>
+          ) : null}
         </View>
 
         {execution.pending ? (
@@ -516,6 +583,14 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   bold: { fontWeight: "600" },
   muted: { color: brand.muted },
+  geoRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  geoText: { color: brand.primary, fontSize: 11 },
+  geoLink: {
+    color: brand.primary,
+    fontSize: 11,
+    textDecorationLine: "underline",
+  },
+  geoWhen: { color: brand.muted, fontSize: 11, marginLeft: 17 },
   positive: { color: brand.primary },
   negative: { color: brand.warning },
   infoGrid: {

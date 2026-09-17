@@ -43,6 +43,16 @@ export type ProductionExecution = {
   productionPlanId: string;
   actualYield: number;
   harvestDate: string | null;
+  /**
+   * Onde o apontamento foi feito. Ausente quando o GPS não respondeu, estava
+   * desligado ou teve a permissão negada — nada disso impede o registro.
+   */
+  latitude: number | null;
+  longitude: number | null;
+  /** Raio de erro da leitura, em metros. */
+  locationAccuracy: number | null;
+  /** Quando o GPS obteve a posição — não quando o apontamento foi salvo. */
+  locationRecordedAt: string | null;
   createdAt: string | null;
   /** Ver `ProductionPlan.updatedAt`. */
   updatedAt: string | null;
@@ -76,6 +86,18 @@ export type ProductionPlanUpdatePayload = {
 export type ProductionExecutionWritePayload = {
   actualYield: number;
   harvestDate: string;
+  /**
+   * Capturadas no momento em que o usuário salvou. Vão no corpo da requisição
+   * e, por isso, ficam congeladas no item da fila: quando o despacho acontecer,
+   * horas depois, a posição enviada continua sendo a do trabalho em campo — e
+   * não a de onde o sinal de internet voltou.
+   */
+  latitude?: number | null;
+  longitude?: number | null;
+  locationAccuracy?: number | null;
+  locationRecordedAt?: string | null;
+  /** Apaga a posição gravada. Nulo significa "não mexer", então remover exige sinal próprio. */
+  clearLocation?: boolean;
 };
 
 // ----- Respostas da API -----
@@ -104,6 +126,10 @@ type ExecutionApiResponse = {
   productionPlanId: string;
   actualYield: number | string;
   harvestDate: string | null;
+  latitude: number | string | null;
+  longitude: number | string | null;
+  locationAccuracy: number | string | null;
+  locationRecordedAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -115,6 +141,16 @@ type ComparisonApiResponse = {
   difference: number | string;
   percentageRealized: number | string;
 };
+
+/**
+ * Como `num`, mas preserva a ausência. Zero é uma coordenada válida (o meridiano
+ * de Greenwich, a linha do equador), então cair para 0 inventaria uma posição.
+ */
+function optionalNum(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 function num(value: number | string | null | undefined): number {
   if (value === null || value === undefined) return 0;
@@ -151,6 +187,10 @@ function mapExecution(raw: ExecutionApiResponse): ProductionExecution {
     productionPlanId: raw.productionPlanId,
     actualYield: num(raw.actualYield),
     harvestDate: raw.harvestDate ?? null,
+    latitude: optionalNum(raw.latitude),
+    longitude: optionalNum(raw.longitude),
+    locationAccuracy: optionalNum(raw.locationAccuracy),
+    locationRecordedAt: raw.locationRecordedAt ?? null,
     createdAt: raw.createdAt ?? null,
     updatedAt: raw.updatedAt ?? null,
     pending: null,
@@ -310,6 +350,10 @@ export function createProductionExecution(
     productionPlanId: planId,
     actualYield: payload.actualYield,
     harvestDate: payload.harvestDate,
+    latitude: payload.latitude ?? null,
+    longitude: payload.longitude ?? null,
+    locationAccuracy: payload.locationAccuracy ?? null,
+    locationRecordedAt: payload.locationRecordedAt ?? null,
     createdAt: null,
     updatedAt: null,
     pending: "create",
@@ -345,6 +389,18 @@ export function updateProductionExecution(
     ...execution,
     actualYield: payload.actualYield,
     harvestDate: payload.harvestDate,
+    // Espelha a regra do backend: apagar é explícito, recapturar substitui a
+    // leitura inteira, e não mandar nada preserva o que já estava lá.
+    latitude: payload.clearLocation ? null : (payload.latitude ?? execution.latitude),
+    longitude: payload.clearLocation
+      ? null
+      : (payload.longitude ?? execution.longitude),
+    locationAccuracy: payload.clearLocation
+      ? null
+      : (payload.locationAccuracy ?? execution.locationAccuracy),
+    locationRecordedAt: payload.clearLocation
+      ? null
+      : (payload.locationRecordedAt ?? execution.locationRecordedAt),
     pending: "update",
   };
 

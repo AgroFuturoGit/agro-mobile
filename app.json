@@ -29,6 +29,12 @@
       "expo-secure-store",
       "expo-font",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O ProduPlan usa sua localização para registrar onde o apontamento de colheita foi feito."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

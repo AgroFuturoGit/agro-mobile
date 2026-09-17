@@ -115,6 +115,59 @@ O fluxo mais maduro do front web, portado por inteiro:
   - **TECHNICIAN** → seleção restrita aos agricultores atribuídos a ele, via
     `GET /technicians/me/farmers`.
 
+### Localização do apontamento
+
+Ao abrir o formulário de apontamento o app pede a permissão de localização —
+ali, e não no boot, para que o pedido chegue junto da ação que o justifica — e
+já inicia a leitura. Ao salvar, as coordenadas entram no corpo da requisição e,
+por consequência, ficam **congeladas no item da fila**: quando o despacho
+acontecer, horas depois, a posição enviada continua sendo a do trabalho em
+campo, e não a de onde o sinal de internet voltou.
+
+O prazo do GPS depende de quem está esperando, e por isso são três:
+
+| Momento               | Prazo | Por quê                                                                                                              |
+| :-------------------- | ----: | :------------------------------------------------------------------------------------------------------------------- |
+| Ao abrir o formulário |  25 s | Corre enquanto o usuário digita quantidade e data. Ninguém espera por ela, então o GPS tem tempo real de achar sinal |
+| Botão **Atualizar**   |  15 s | O usuário pediu e vê o indicador girando                                                                             |
+| Ao tocar em salvar    |   5 s | Só se a leitura de abertura falhou. Aqui ele quer o registro gravado, não a coordenada                               |
+
+Passado o prazo, o apontamento é salvo sem coordenada e a tela explica por quê.
+Obter posição não é instantâneo: com o aparelho recém-ligado, sob mata fechada
+ou dentro de um galpão, a primeira leitura pode levar dezenas de segundos ou
+nunca chegar — e nada disso pode impedir o registro da colheita.
+
+Um toque na coordenada — na tela de detalhe ou no botão **Ver no mapa** do
+formulário — abre a posição no aplicativo de mapas do aparelho. Não há mapa
+embutido de propósito: tiles exigem rede, justamente o que falta em campo.
+Delegar ao aplicativo instalado aproveita as regiões que o usuário já baixou, e
+não custa dependência nova, chave de API nem rebuild do APK.
+
+**Ao editar um apontamento que já tem posição, nada é capturado.** A tela mostra
+a coordenada gravada, indicando quando foi registrada, e só o botão
+**Atualizar** a substitui. Capturar ao abrir a edição trocaria o lugar da
+colheita pelo lugar onde alguém corrigiu um número.
+
+O prazo é imposto por `Promise.race` em `src/lib/location.ts`, porque o
+`getCurrentPositionAsync` do `expo-location` não aceita timeout: ele resolve
+quando conseguir.
+
+Junto do par de coordenadas vão a **precisão** (raio de erro em metros, que o
+GPS informa) e o **instante da leitura**. A precisão é o que separa uma posição
+que localiza o talhão de uma que só aponta a cidade; sem ela as duas entrariam
+no banco indistinguíveis.
+
+O formulário mostra a coordenada, a precisão e dois botões — **Atualizar**, que
+recaptura ali na hora, e **Remover**, que salva deliberadamente sem posição.
+A coordenada nunca é digitada: ela é sempre leitura do GPS, e portanto evidência
+de onde o registro foi gerado, não declaração de onde alguém diz que foi.
+
+**O aviso de descompasso de data** existe porque a data da colheita é escolhida
+pelo usuário e pode ser retroativa, enquanto a posição é sempre a de agora. Quem
+colhe de manhã e registra à noite, em casa, grava a coordenada da casa — e nada
+no dado denunciaria isso. Quando as duas datas diferem, a tela avisa antes de
+salvar, e o usuário decide entre recapturar, remover ou manter.
+
 ## Como o offline funciona
 
 Três peças, em `src/lib`:
