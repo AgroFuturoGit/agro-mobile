@@ -11,6 +11,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Button, HelperText, Text, TextInput } from "react-native-paper";
 
+import { LocationMap } from "@/components/LocationMap";
 import { useSync } from "@/contexts/SyncContext";
 import {
   createProductionExecution,
@@ -362,6 +363,15 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
                 Pode não ser o local da colheita.
               </Text>
             </View>
+          ) : null}
+
+          {/*
+            EXPERIMENTO: mapa embutido com OpenStreetMap. Mostra o ponto e, em
+            volta, o raio de erro da leitura — que comunica a confiança da
+            posição melhor do que o número em metros.
+          */}
+          {!locationRemoved && location?.status === "ok" ? (
+            <LocationMap coordinates={location.coordinates} />
           ) : null}
 
           <View style={styles.locationActions}>
