@@ -137,11 +137,21 @@ Obter posição não é instantâneo: com o aparelho recém-ligado, sob mata fec
 ou dentro de um galpão, a primeira leitura pode levar dezenas de segundos ou
 nunca chegar — e nada disso pode impedir o registro da colheita.
 
-Um toque na coordenada — na tela de detalhe ou no botão **Ver no mapa** do
-formulário — abre a posição no aplicativo de mapas do aparelho. Não há mapa
-embutido de propósito: tiles exigem rede, justamente o que falta em campo.
-Delegar ao aplicativo instalado aproveita as regiões que o usuário já baixou, e
-não custa dependência nova, chave de API nem rebuild do APK.
+O formulário desenha um **mapa** com a posição e, em volta, um círculo do
+tamanho do raio de erro — que comunica a confiança da leitura melhor do que o
+número em metros: dá para ver se o talhão inteiro cabe dentro da incerteza.
+
+É **OpenStreetMap com Leaflet**, dentro de uma `WebView`. A alternativa seria
+`react-native-maps` com o Maps SDK do Google: o SDK móvel não é cobrado, mas
+exige projeto no Google Cloud, chave de API, cartão cadastrado na conta de
+faturamento e rebuild do APK. O Leaflet não pede nada disso — em troca de uma
+dependência, `react-native-webview`.
+
+**Os tiles vêm da rede.** Sem conexão o mapa não desenha, e a tela diz isso em
+vez de deixar um quadrado cinza. Por isso ele não substitui o acesso ao mapa do
+aparelho: um toque na coordenada — na tela de detalhe ou no botão **Ver no
+mapa** — abre a posição no aplicativo instalado, que aproveita as regiões que o
+usuário já tenha baixado offline.
 
 **Ao editar um apontamento que já tem posição, nada é capturado.** A tela mostra
 a coordenada gravada, indicando quando foi registrada, e só o botão
