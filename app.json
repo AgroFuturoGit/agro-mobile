@@ -41,7 +41,8 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "extra": {
       "apiPort": 8080

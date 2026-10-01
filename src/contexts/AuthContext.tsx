@@ -130,6 +130,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (status !== "signed-in" || sessionExpired) return;
 
+    // A regra `set-state-in-effect`, nova no SDK 56, barra chamadas que possam
+    // mudar estado durante o efeito. Aqui não há render síncrono extra: o
+    // `revalidate` só toca no estado depois de aguardar a resposta da API, e
+    // antes disso pode nem chamar nada — sai cedo sem token ou sem rede.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void revalidate();
 
     return subscribeConnectivity((connectivity) => {

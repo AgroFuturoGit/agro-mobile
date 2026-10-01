@@ -3,6 +3,10 @@
   "compilerOptions": {
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    // A partir do SDK 56 o tsconfig base do Expo deixa de puxar os @types
+    // automaticamente; sem isto o `jest` dos testes e o `Buffer` do setup
+    // ficam sem tipo.
+    "types": ["jest", "node"],
     "paths": {
       "@/*": ["./src/*"]
     }

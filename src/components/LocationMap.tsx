@@ -133,7 +133,13 @@ const styles = StyleSheet.create({
   },
   webview: { flex: 1 },
   carregando: {
-    ...StyleSheet.absoluteFillObject,
+    // `StyleSheet.absoluteFillObject` saiu na React Native 0.85; o que restou é
+    // `absoluteFill`, que é um estilo registrado e não um objeto para espalhar.
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: brand.background,
