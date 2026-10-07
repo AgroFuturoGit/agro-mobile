@@ -178,6 +178,40 @@ colhe de manhã e registra à noite, em casa, grava a coordenada da casa — e n
 no dado denunciaria isso. Quando as duas datas diferem, a tela avisa antes de
 salvar, e o usuário decide entre recapturar, remover ou manter.
 
+### Anexos fotográficos
+
+O formulário de colheita permite fotografar a comprovação — ocorrência
+climática, praga na lavoura, nota fiscal de insumo — até **cinco fotos por
+apontamento**. A permissão de câmera é pedida no toque do botão, não na abertura
+da tela: o pedido faz sentido junto da ação que o justifica, e negá-lo não
+interrompe nada, porque o apontamento continua sendo salvo sem foto.
+
+A imagem é reduzida a 1280 px de largura e comprimida a 60% antes de ser
+guardada. A câmera de um celular comum entrega perto de 4 MB, resolução muito
+além do que comprova uma praga, e o custo apareceria duas vezes: no
+armazenamento do aparelho e no upload por rede móvel.
+
+O arquivo vai para o **diretório do aplicativo**, não para o cache — entre
+fotografar em campo e conseguir sinal podem passar dias, e o sistema esvazia o
+cache quando quer. Enquanto não subiu, aquele arquivo é a única cópia da
+comprovação.
+
+O envio é sempre pela fila, mesmo havendo rede, porque depende de o apontamento
+já existir no servidor. Ficando no mesmo recurso da fila, a foto só sobe depois
+do apontamento — e o id provisório (`local-…`) no caminho já foi trocado pelo
+real. A retentativa com espera crescente, que a imagem exige mais que o JSON por
+subir em rede instável, vem de graça por estar na fila.
+
+**O arquivo só é apagado depois do aceite do servidor.** Apagá-lo antes —
+ao enfileirar, ou ao primeiro envio sem esperar resposta — destruiria a única
+cópia de algo que ainda pode precisar ser reenviado. Descartar o item na tela de
+Sincronização também apaga o arquivo: é a decisão de nunca enviar aquela foto.
+
+O upload carrega um `clientId` gerado no aparelho antes do primeiro envio. É o
+que o torna seguro para repetir: se a resposta se perder na rede depois de o
+servidor já ter gravado, a tentativa seguinte chega com a mesma chave e recebe o
+anexo existente de volta, com **200** no lugar de 201, em vez de criar outro.
+
 ## Como o offline funciona
 
 Três peças, em `src/lib`:

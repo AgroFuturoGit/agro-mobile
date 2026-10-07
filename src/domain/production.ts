@@ -1,8 +1,14 @@
 import { apiRequest } from "@/lib/api";
+import type { Attachment } from "@/lib/attachments";
 import { CacheKeys, readCache, writeCache } from "@/lib/cache";
 import { formatDate, formatNumber } from "@/lib/format";
 import { mutate, type MutationResult } from "@/lib/mutate";
-import { createLocalId, isLocalId, type OutboxEntry } from "@/lib/outbox";
+import {
+  createLocalId,
+  enqueue,
+  isLocalId,
+  type OutboxEntry,
+} from "@/lib/outbox";
 
 // ----- Tipos de domínio -----
 
@@ -445,6 +451,37 @@ export function deleteProductionExecution(
       invalidates: [CacheKeys.executions(planId), CacheKeys.comparison(planId)],
     },
   });
+}
+
+/**
+ * Enfileira o envio das fotos de um apontamento.
+ *
+ * Sempre pela fila, mesmo com rede disponível. Não é desencargo: o upload
+ * depende do apontamento já existir no servidor, e quando ele foi criado
+ * offline o id ainda é provisório. Deixar os dois no mesmo recurso da fila
+ * garante que a foto só suba depois do apontamento — e que o `local-...` no
+ * caminho já tenha sido trocado pelo id real.
+ *
+ * O retentar com espera crescente, que a imagem exige mais que o JSON por
+ * subir em rede instável, vem de graça por estar na fila.
+ */
+export async function enqueueExecutionAttachments(
+  executionId: string,
+  planId: string,
+  harvestDate: string,
+  attachments: Attachment[],
+): Promise<void> {
+  for (const attachment of attachments) {
+    await enqueue({
+      kind: "attachment.upload",
+      method: "POST",
+      path: `/production-executions/${executionId}/attachments?clientId=${attachment.clientId}`,
+      label: `Foto do apontamento de ${formatDate(harvestDate)}`,
+      upload: attachment,
+      meta: { planId, executionId },
+      invalidates: [CacheKeys.executions(planId)],
+    });
+  }
 }
 
 // ----- Sobreposição do que está na fila -----
