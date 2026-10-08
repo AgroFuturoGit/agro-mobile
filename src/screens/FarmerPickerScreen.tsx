@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Divider, List, Searchbar, Text } from "react-native-paper";
+import { Card, List, Searchbar, Text } from "react-native-paper";
 
 import { OfflineBanner } from "@/components/OfflineBanner";
 import {
@@ -108,7 +108,6 @@ export function FarmerPickerScreen({ navigation }: Props) {
       <FlatList
         data={farmers}
         keyExtractor={(item) => item.id}
-        ItemSeparatorComponent={Divider}
         refreshControl={
           <RefreshControl
             refreshing={query.refreshing}
@@ -133,24 +132,31 @@ export function FarmerPickerScreen({ navigation }: Props) {
             <CacheHint cachedAt={query.cachedAt} stale={query.stale} />
           ) : null
         }
-        contentContainerStyle={
-          farmers.length === 0 ? styles.emptyContent : undefined
-        }
+        contentContainerStyle={[
+          styles.list,
+          farmers.length === 0 && styles.emptyContent,
+        ]}
         renderItem={({ item }) => (
-          <List.Item
-            title={farmerDisplayName(item)}
-            description={() => (
-              <Text variant="bodySmall" style={styles.muted}>
-                {item.community?.name ?? "Sem comunidade"}
-                {item.community?.organization
-                  ? ` · ${item.community.organization.name}`
-                  : ""}
-              </Text>
-            )}
-            left={(props) => <List.Icon {...props} icon="account-outline" />}
-            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          <Card
+            mode="outlined"
+            style={styles.card}
             onPress={() => openFarmer(item)}
-          />
+          >
+            <List.Item
+              title={farmerDisplayName(item)}
+              titleStyle={styles.cardTitle}
+              description={() => (
+                <Text variant="bodySmall" style={styles.muted}>
+                  {item.community?.name ?? "Sem comunidade"}
+                  {item.community?.organization
+                    ? ` · ${item.community.organization.name}`
+                    : ""}
+                </Text>
+              )}
+              left={(props) => <List.Icon {...props} icon="account-outline" />}
+              right={(props) => <List.Icon {...props} icon="chevron-right" />}
+            />
+          </Card>
         )}
       />
     </View>
@@ -170,6 +176,9 @@ const styles = StyleSheet.create({
     backgroundColor: brand.surface,
   },
   searchInput: { minHeight: 0 },
+  list: { padding: spacing.lg, paddingTop: spacing.sm, gap: spacing.md },
   emptyContent: { flexGrow: 1 },
+  card: { backgroundColor: brand.surface, borderColor: brand.border },
+  cardTitle: { fontWeight: "600" },
   muted: { color: brand.muted },
 });

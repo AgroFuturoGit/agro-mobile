@@ -6,7 +6,7 @@ import type {
   NativeStackNavigationProp,
   NativeStackScreenProps,
 } from "@react-navigation/native-stack";
-import { Card, Chip, FAB, Text } from "react-native-paper";
+import { Card, Chip, Divider, FAB, Text } from "react-native-paper";
 
 import { OfflineBanner } from "@/components/OfflineBanner";
 import {
@@ -205,9 +205,11 @@ function PlanCard({
           ) : null}
         </View>
 
+        <Divider />
+
         <View style={styles.metrics}>
           <Metric label="Área" value={`${formatNumber(plan.plantedArea)} ha`} />
-          <Metric label="Esperado" value={formatNumber(plan.expectedYield)} />
+          <Metric label="Produção" value={formatNumber(plan.expectedYield)} />
           <Metric
             label="Plantio"
             value={formatDate(plan.plannedPlantingDate)}
