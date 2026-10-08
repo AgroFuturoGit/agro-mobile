@@ -18,6 +18,7 @@ import {
   TextInput,
 } from "react-native-paper";
 
+import { DateField } from "@/components/DateField";
 import { useSync } from "@/contexts/SyncContext";
 import {
   type Crop,
@@ -286,13 +287,10 @@ export function PlanFormScreen({ route, navigation }: Props) {
         </View>
 
         <View>
-          <TextInput
+          <DateField
             label="Plantio previsto (opcional)"
             value={plantingDate}
             onChangeText={setPlantingDate}
-            mode="outlined"
-            keyboardType="numbers-and-punctuation"
-            placeholder="dd/mm/aaaa"
             error={Boolean(errors.plannedPlantingDate)}
             disabled={submitting}
           />

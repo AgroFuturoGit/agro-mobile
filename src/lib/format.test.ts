@@ -2,6 +2,7 @@ import {
   formatCpf,
   formatDate,
   formatNumber,
+  maskDateInput,
   parseDateInput,
   parseDecimal,
   toIsoDate,
@@ -123,5 +124,41 @@ describe("formatCpf", () => {
 
   it("representa ausência", () => {
     expect(formatCpf(null)).toBe("—");
+  });
+});
+
+describe("maskDateInput", () => {
+  it("põe as barras conforme o usuário digita", () => {
+    expect(maskDateInput("1")).toBe("1");
+    expect(maskDateInput("15")).toBe("15");
+    expect(maskDateInput("159")).toBe("15/9");
+    expect(maskDateInput("1509")).toBe("15/09");
+    expect(maskDateInput("15092")).toBe("15/09/2");
+    expect(maskDateInput("15092026")).toBe("15/09/2026");
+  });
+
+  it("descarta letra, que a API nunca aceitaria nesse campo", () => {
+    expect(maskDateInput("15a09b2026")).toBe("15/09/2026");
+    expect(maskDateInput("amanhã")).toBe("");
+  });
+
+  it("filtra também o texto colado", () => {
+    expect(maskDateInput("colhido em 15/09/2026")).toBe("15/09/2026");
+  });
+
+  it("não deixa passar de oito dígitos", () => {
+    expect(maskDateInput("150920269999")).toBe("15/09/2026");
+  });
+
+  it("aceita apagar de trás para frente", () => {
+    // O campo devolve o texto já sem o último caractere; a máscara o reformata.
+    expect(maskDateInput("15/09/202")).toBe("15/09/202");
+    expect(maskDateInput("15/09/")).toBe("15/09");
+    expect(maskDateInput("15/0")).toBe("15/0");
+    expect(maskDateInput("15/")).toBe("15");
+  });
+
+  it("o que ela produz é lido de volta por parseDateInput", () => {
+    expect(parseDateInput(maskDateInput("15092026"))).toBe("2026-09-15");
   });
 });

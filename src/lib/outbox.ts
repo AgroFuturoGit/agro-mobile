@@ -1,4 +1,9 @@
 import { ApiError, apiRequest, isOfflineError } from "@/lib/api";
+import {
+  type Attachment,
+  discardAttachmentFile,
+  uploadAttachment,
+} from "@/lib/attachments";
 import { notifyInvalidation } from "@/lib/cache";
 import { getConnectivity, isProbablyOnline } from "@/lib/net";
 import { readJson, StorageKeys, writeJson } from "@/lib/storage";
@@ -9,7 +14,8 @@ export type OutboxKind =
   | "plan.delete"
   | "execution.create"
   | "execution.update"
-  | "execution.delete";
+  | "execution.delete"
+  | "attachment.upload";
 
 /**
  * `failed` e `conflict` são estados distintos de propósito: o primeiro diz que
@@ -45,6 +51,15 @@ export type OutboxEntry = {
    * venceria toda disputa e o conflito nunca apareceria.
    */
   baseUpdatedAt?: string | null;
+  /**
+   * A foto a enviar, quando o item é um anexo.
+   *
+   * Fica fora de `body` porque não é JSON: o despacho lê o arquivo do disco e
+   * sobe em `multipart/form-data`. Enquanto este campo existir e o item não
+   * tiver sido aceito, o arquivo apontado por `upload.uri` é a única cópia da
+   * comprovação — ele só pode ser apagado depois do aceite do servidor.
+   */
+  upload?: Attachment;
   attempts: number;
   lastError: string | null;
   status: OutboxStatus;
@@ -158,6 +173,7 @@ export async function enqueue(
     snapshot: input.snapshot,
     createdAt: Date.now(),
     baseUpdatedAt: input.baseUpdatedAt ?? null,
+    upload: input.upload,
     attempts: 0,
     lastError: null,
     status: "pending",
@@ -171,7 +187,12 @@ export async function enqueue(
 }
 
 export async function discardEntry(id: string): Promise<void> {
-  entries = entries.filter((entry) => entry.id !== id);
+  // Descartar o item é a decisão de não enviar aquela foto. Deixar o arquivo
+  // para trás seria guardar no aparelho algo que nunca mais vai subir.
+  const entry = entries.find((item) => item.id === id);
+  if (entry?.upload) discardAttachmentFile(entry.upload.uri);
+
+  entries = entries.filter((item) => item.id !== id);
   await persist();
 }
 
@@ -195,6 +216,9 @@ export async function retryEntry(id: string): Promise<void> {
 }
 
 export async function clearOutbox(): Promise<void> {
+  entries.forEach((entry) => {
+    if (entry.upload) discardAttachmentFile(entry.upload.uri);
+  });
   entries = [];
   await persist();
 }
@@ -331,20 +355,31 @@ export async function flushOutbox(): Promise<FlushResult> {
         if (!entry || entry.status !== "pending") continue;
 
         try {
-          const result = await apiRequest<unknown>(entry.path, {
-            method: entry.method,
-            body: entry.body,
-            force: true,
-          });
+          const result = entry.upload
+            ? await uploadAttachment(entry.upload, entry.path)
+            : await apiRequest<unknown>(entry.path, {
+                method: entry.method,
+                body: entry.body,
+                force: true,
+              });
 
           entries = entries.filter((item) => item.id !== entry.id);
           entry.invalidates.forEach((key) => invalidated.add(key));
           sent += 1;
 
+          /*
+           * Só agora o arquivo pode sair do aparelho.
+           *
+           * Apagá-lo antes do aceite — ao enfileirar, ou ao primeiro envio
+           * sem esperar a resposta — destruiria a única cópia da foto num
+           * item que ainda pode precisar ser reenviado.
+           */
+          if (entry.upload) discardAttachmentFile(entry.upload.uri);
+
           // O create devolveu o id real. Quem ficou na fila apontando para o
           // id local precisa passar a apontar para ele — senão o próximo item
           // do mesmo plano bate num 404 e o registro se perde.
-          if (entry.kind === "plan.create") {
+          if (entry.kind === "plan.create" || entry.kind === "execution.create") {
             const realId = idFromPayload(result);
             if (realId !== null) remapLocalId(entry.id, realId, invalidated);
           }
@@ -506,7 +541,8 @@ function remapLocalId(
 ): void {
   entries = entries.map((entry) => {
     const inPath = entry.path.includes(localId);
-    const inMeta = entry.meta.planId === localId;
+    const inMeta =
+      entry.meta.planId === localId || entry.meta.executionId === localId;
     const inKeys = entry.invalidates.some((key) => key.includes(localId));
 
     if (!inPath && !inMeta && !inKeys) return entry;
@@ -519,7 +555,16 @@ function remapLocalId(
     return {
       ...entry,
       path: inPath ? entry.path.split(localId).join(realId) : entry.path,
-      meta: inMeta ? { ...entry.meta, planId: realId } : entry.meta,
+      meta: inMeta
+        ? {
+            ...entry.meta,
+            planId: entry.meta.planId === localId ? realId : entry.meta.planId,
+            executionId:
+              entry.meta.executionId === localId
+                ? realId
+                : entry.meta.executionId,
+          }
+        : entry.meta,
       invalidates: entry.invalidates.map((key) =>
         key.split(localId).join(realId),
       ),

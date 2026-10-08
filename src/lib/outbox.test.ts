@@ -1,6 +1,12 @@
 import { ApiError, apiRequest, OfflineError } from "@/lib/api";
 import {
+  type Attachment,
+  discardAttachmentFile,
+  uploadAttachment,
+} from "@/lib/attachments";
+import {
   clearOutbox,
+  discardEntry,
   enqueue,
   flushOutbox,
   getOutbox,
@@ -18,6 +24,14 @@ jest.mock("@/lib/api", () => {
 
 // A fila decide se envia agora consultando a conectividade. Nos testes ela é
 // fixada em "online" — quem controla o resultado é o mock do `apiRequest`.
+// O upload de anexo é nativo (`expo-file-system`), inexistente sob o Jest.
+// O que se verifica aqui é o contrato da fila com ele: quando chama, e quando
+// manda apagar o arquivo.
+jest.mock("@/lib/attachments", () => ({
+  uploadAttachment: jest.fn(),
+  discardAttachmentFile: jest.fn(),
+}));
+
 jest.mock("@/lib/net", () => ({
   getConnectivity: () => ({
     isConnected: true,
@@ -28,6 +42,12 @@ jest.mock("@/lib/net", () => ({
 }));
 
 const mockedRequest = apiRequest as jest.MockedFunction<typeof apiRequest>;
+const mockedUpload = uploadAttachment as jest.MockedFunction<
+  typeof uploadAttachment
+>;
+const mockedDiscard = discardAttachmentFile as jest.MockedFunction<
+  typeof discardAttachmentFile
+>;
 
 type QueueInput = Parameters<typeof enqueue>[0];
 
@@ -80,8 +100,13 @@ function calledPaths(): string[] {
 }
 
 beforeEach(async () => {
-  mockedRequest.mockReset();
+  // Esvaziar a fila antes de zerar os mocks: `clearOutbox` apaga o arquivo de
+  // cada anexo pendente, e essas chamadas são da limpeza do teste anterior —
+  // não do teste que está começando.
   await clearOutbox();
+  mockedRequest.mockReset();
+  mockedUpload.mockReset();
+  mockedDiscard.mockReset();
 });
 
 describe("streamKeyOf", () => {
@@ -464,5 +489,110 @@ describe("conflito (409)", () => {
     });
 
     expect(entry.baseUpdatedAt).toBe("2026-09-01T08:00:00");
+  });
+});
+
+describe("anexos fotográficos na fila", () => {
+  const foto: Attachment = {
+    clientId: "11111111-1111-4111-8111-111111111111",
+    uri: "file:///doc/attachments/foto.jpg",
+    filename: "foto.jpg",
+    mimeType: "image/jpeg",
+    sizeBytes: 204800,
+    capturedAt: "2026-10-07T12:00:00.000Z",
+  };
+
+  function anexo(executionId: string, planId = "plan-1"): QueueInput {
+    return {
+      kind: "attachment.upload",
+      method: "POST",
+      path: `/production-executions/${executionId}/attachments?clientId=${foto.clientId}`,
+      label: "Foto do apontamento",
+      upload: foto,
+      meta: { planId, executionId },
+      invalidates: [`executions:plan:${planId}`],
+    };
+  }
+
+  it("sobe a imagem pelo upload nativo, fora do caminho JSON", async () => {
+    mockedUpload.mockResolvedValue({ id: "att-1" });
+
+    await enqueue(anexo("exec-1"));
+    await flushOutbox();
+
+    expect(mockedUpload).toHaveBeenCalledTimes(1);
+    expect(mockedRequest).not.toHaveBeenCalled();
+  });
+
+  it("apaga o arquivo do aparelho só depois do aceite do servidor", async () => {
+    mockedUpload.mockResolvedValue({ id: "att-1" });
+
+    await enqueue(anexo("exec-1"));
+    await flushOutbox();
+
+    expect(mockedDiscard).toHaveBeenCalledWith(foto.uri);
+    expect(getOutbox()).toHaveLength(0);
+  });
+
+  it("preserva o arquivo quando o envio falha, para a retentativa", async () => {
+    mockedUpload.mockRejectedValue(new OfflineError("rede caiu"));
+
+    await enqueue(anexo("exec-1"));
+    await flushOutbox();
+
+    expect(mockedDiscard).not.toHaveBeenCalled();
+    expect(getOutbox()).toHaveLength(1);
+  });
+
+  it("preserva o arquivo quando o servidor recusa com 5xx", async () => {
+    mockedUpload.mockRejectedValue(new ApiError(500, "falha interna", null));
+
+    await enqueue(anexo("exec-1"));
+    await flushOutbox();
+
+    expect(mockedDiscard).not.toHaveBeenCalled();
+    expect(byLabel("Foto do apontamento")).toBeDefined();
+  });
+
+  it("descartar o item apaga a foto que nunca mais será enviada", async () => {
+    const entry = await enqueue(anexo("exec-1"));
+
+    await discardEntry(entry.id);
+
+    expect(mockedDiscard).toHaveBeenCalledWith(foto.uri);
+    expect(getOutbox()).toHaveLength(0);
+  });
+
+  it("troca o id provisório do apontamento pelo real antes de subir a foto", async () => {
+    // O caso de campo: apontamento criado sem sinal, foto anexada nele, e os
+    // dois subindo juntos quando a rede volta. Sem o remap, a foto bateria
+    // num `local-...` que o servidor não conhece.
+    mockedRequest.mockResolvedValue({ id: "exec-real" });
+    mockedUpload.mockResolvedValue({ id: "att-1" });
+
+    await enqueue({
+      id: "local-exec-1",
+      kind: "execution.create",
+      method: "POST",
+      path: "/production-plans/plan-1/executions",
+      body: { actualYield: 10, harvestDate: "2026-10-07" },
+      label: "Apontamento offline",
+      meta: { planId: "plan-1" },
+      invalidates: ["executions:plan:plan-1"],
+    });
+    await enqueue(anexo("local-exec-1"));
+
+    await flushOutbox();
+
+    const caminho = mockedUpload.mock.calls[0]?.[1];
+    expect(caminho).toContain("/production-executions/exec-real/attachments");
+    expect(caminho).not.toContain("local-exec-1");
+  });
+
+  it("mantém a foto no mesmo recurso do apontamento, para subir depois dele", async () => {
+    const execucao = await enqueue(executionCreate("plan-1"));
+    const foto1 = await enqueue(anexo("exec-1", "plan-1"));
+
+    expect(streamKeyOf(foto1)).toBe(streamKeyOf(execucao));
   });
 });

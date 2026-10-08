@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,13 +11,20 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Button, HelperText, Text, TextInput } from "react-native-paper";
 
+import { DateField } from "@/components/DateField";
 import { LocationMap } from "@/components/LocationMap";
+import { PhotoCapture } from "@/components/PhotoCapture";
 import { useSync } from "@/contexts/SyncContext";
 import {
   createProductionExecution,
+  enqueueExecutionAttachments,
   updateProductionExecution,
 } from "@/domain/production";
 import { ApiError, parseFieldErrors } from "@/lib/api";
+import {
+  type Attachment,
+  discardAttachmentFile,
+} from "@/lib/attachments";
 import {
   formatDate,
   formatDateTime,
@@ -93,6 +100,16 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
     form?: string;
   }>({});
 
+  /**
+   * Fotos tiradas nesta sessão, ainda não enfileiradas.
+   *
+   * Enquanto estiverem aqui, os arquivos já existem no disco mas não pertencem
+   * a ninguém: sair sem salvar precisa apagá-los, ou o aparelho acumula
+   * comprovação de apontamento que nunca foi registrado.
+   */
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const entregues = useRef(false);
+
   // A permissão é pedida ao abrir o formulário, não no boot do app: o usuário
   // entende o pedido quando ele chega junto da ação que o justifica. A leitura
   // já começa aqui para que, na hora de salvar, a posição normalmente esteja
@@ -112,6 +129,36 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /*
+   * A limpeza da desmontagem roda uma vez só e, por isso, não pode depender de
+   * `attachments`: leria a lista vazia do primeiro render. O espelho em ref é
+   * atualizado por efeito, e não durante o render, para que o React continue
+   * livre para descartar uma renderização sem deixar o espelho adiantado.
+   */
+  const attachmentsRef = useRef<Attachment[]>([]);
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
+  /*
+   * Desmontou sem ter entregue as fotos à fila: foi cancelamento, voltar pelo
+   * cabeçalho ou gesto do sistema. Em qualquer um deles o apontamento não
+   * existe, e os arquivos no disco não têm mais dono.
+   */
+  useEffect(() => {
+    return () => {
+      if (entregues.current) return;
+      attachmentsRef.current.forEach((item) => discardAttachmentFile(item.uri));
+    };
+  }, []);
+
+  function handleRemoveAttachment(alvo: Attachment) {
+    discardAttachmentFile(alvo.uri);
+    setAttachments((atuais) =>
+      atuais.filter((item) => item.clientId !== alvo.clientId),
+    );
+  }
 
   /** A tela está mostrando a posição gravada, e não uma leitura desta sessão. */
   const mantendoPosicaoSalva =
@@ -187,8 +234,27 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
         ? await updateProductionExecution(execution, payload)
         : await createProductionExecution(plan.id, payload);
 
+      // Criado offline, o apontamento ainda não tem id do servidor: o id do
+      // item da fila é o provisório que a tela usa, e a própria fila o troca
+      // pelo real quando o `create` for aceito.
+      const executionId = isEditing
+        ? execution.id
+        : (result.data?.id ?? result.entry?.id ?? null);
+
+      if (executionId && attachments.length > 0) {
+        await enqueueExecutionAttachments(
+          executionId,
+          plan.id,
+          parsedDate as string,
+          attachments,
+        );
+      }
+
+      // Daqui em diante os arquivos pertencem à fila: a limpeza da desmontagem
+      // não pode mais apagá-los.
+      entregues.current = true;
+
       navigation.goBack();
-      void result;
     } catch (error) {
       if (error instanceof ApiError) {
         const fields = parseFieldErrors(error.payload);
@@ -218,7 +284,7 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
             {isEditing ? "Editar apontamento" : "Registrar colheita"}
           </Text>
           <Text variant="bodySmall" style={styles.muted}>
-            {plan.crop?.name ?? "Plano"} · Safra {plan.harvest?.label ?? "—"}
+            {plan.crop?.name ?? "Plano"} · {plan.harvest?.label ?? "—"}
           </Text>
         </View>
 
@@ -257,13 +323,10 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
         </View>
 
         <View>
-          <TextInput
+          <DateField
             label="Data da colheita"
             value={harvestDate}
             onChangeText={setHarvestDate}
-            mode="outlined"
-            keyboardType="numbers-and-punctuation"
-            placeholder="dd/mm/aaaa"
             right={
               <TextInput.Icon
                 icon="calendar-today"
@@ -414,6 +477,13 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
             ) : null}
           </View>
         </View>
+
+        <PhotoCapture
+          attachments={attachments}
+          onAdd={(foto) => setAttachments((atuais) => [...atuais, foto])}
+          onRemove={handleRemoveAttachment}
+          disabled={submitting}
+        />
 
         <View style={styles.actions}>
           <Button

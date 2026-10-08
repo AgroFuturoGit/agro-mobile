@@ -201,7 +201,7 @@ export function PlanDetailScreen({ route, navigation }: Props) {
                 </Text>
                 <Text variant="bodySmall" style={styles.muted}>
                   {plan.crop?.variety ? `${plan.crop.variety} · ` : ""}
-                  Safra {plan.harvest?.label ?? "—"}
+                  {plan.harvest?.label ?? "—"}
                 </Text>
               </View>
 

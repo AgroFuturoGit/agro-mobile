@@ -84,6 +84,14 @@ export function setUnauthorizedHandler(handler: () => void): void {
   unauthorizedHandler = handler;
 }
 
+/**
+ * O token atual, para quem precisa montar a requisição por fora de
+ * `apiRequest` — hoje só o upload de anexo, que é feito pelo lado nativo.
+ */
+export function getAuthToken(): string | null {
+  return tokenProvider();
+}
+
 export type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   auth?: boolean;

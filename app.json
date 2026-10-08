@@ -35,6 +35,13 @@
         }
       ],
       [
+        "expo-camera",
+        {
+          "cameraPermission": "O ProduPlan usa a câmera para anexar fotos de comprovação ao apontamento de colheita.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {
