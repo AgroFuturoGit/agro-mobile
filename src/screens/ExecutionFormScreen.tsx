@@ -283,7 +283,7 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
             {isEditing ? "Editar apontamento" : "Registrar colheita"}
           </Text>
           <Text variant="bodySmall" style={styles.muted}>
-            {plan.crop?.name ?? "Plano"} · Safra {plan.harvest?.label ?? "—"}
+            {plan.crop?.name ?? "Plano"} · {plan.harvest?.label ?? "—"}
           </Text>
         </View>
 

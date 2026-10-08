@@ -6,8 +6,8 @@ import {
 } from "@/lib/attachments";
 import {
   clearOutbox,
-  enqueue,
   discardEntry,
+  enqueue,
   flushOutbox,
   getOutbox,
   MAX_SERVER_ATTEMPTS,

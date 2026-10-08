@@ -218,7 +218,7 @@ function PlanCard({
 
         {plan.harvest ? (
           <Text variant="bodySmall" style={styles.muted}>
-            Safra {plan.harvest.label}
+            {plan.harvest.label}
           </Text>
         ) : null}
       </Card.Content>
