@@ -12,8 +12,8 @@ import {
   Button,
   Dialog,
   HelperText,
-  List,
   Portal,
+  RadioButton,
   Text,
   TextInput,
 } from "react-native-paper";
@@ -332,17 +332,18 @@ export function PlanFormScreen({ route, navigation }: Props) {
           <Dialog.ScrollArea style={styles.dialogArea}>
             <ScrollView>
               {picker === "crop" ? (
-                <>
+                <RadioButton.Group
+                  value={cropId ?? ""}
+                  onValueChange={(value) => {
+                    setCropId(value);
+                    setPicker(null);
+                  }}
+                >
                   {crops.map((crop) => (
-                    <OpcaoDaLista
+                    <RadioButton.Item
                       key={crop.id}
-                      titulo={crop.name}
-                      detalhe={crop.variety || null}
-                      selecionada={crop.id === cropId}
-                      onPress={() => {
-                        setCropId(crop.id);
-                        setPicker(null);
-                      }}
+                      label={cropLabel(crop)}
+                      value={crop.id}
                     />
                   ))}
                   {crops.length === 0 ? (
@@ -351,19 +352,20 @@ export function PlanFormScreen({ route, navigation }: Props) {
                       lista.
                     </Text>
                   ) : null}
-                </>
+                </RadioButton.Group>
               ) : (
-                <>
+                <RadioButton.Group
+                  value={harvestId ?? ""}
+                  onValueChange={(value) => {
+                    setHarvestId(value);
+                    setPicker(null);
+                  }}
+                >
                   {harvests.map((harvest) => (
-                    <OpcaoDaLista
+                    <RadioButton.Item
                       key={harvest.id}
-                      titulo={harvest.label}
-                      detalhe={null}
-                      selecionada={harvest.id === harvestId}
-                      onPress={() => {
-                        setHarvestId(harvest.id);
-                        setPicker(null);
-                      }}
+                      label={harvest.label}
+                      value={harvest.id}
                     />
                   ))}
                   {harvests.length === 0 ? (
@@ -372,7 +374,7 @@ export function PlanFormScreen({ route, navigation }: Props) {
                       lista.
                     </Text>
                   ) : null}
-                </>
+                </RadioButton.Group>
               )}
             </ScrollView>
           </Dialog.ScrollArea>
@@ -382,47 +384,6 @@ export function PlanFormScreen({ route, navigation }: Props) {
         </Dialog>
       </Portal>
     </KeyboardAvoidingView>
-  );
-}
-
-/**
- * Uma opção do seletor de cultura ou safra.
- *
- * Era um `RadioButton.Item`, e o rádio mentia: sugeria "marque e confirme"
- * quando o toque já escolhe e fecha. Pior, jogava o indicador para a borda
- * direita, longe do texto que ele qualifica. Aqui o toque é na linha inteira,
- * e o visto só aparece no que já está escolhido.
- *
- * Nome e variedade também se separam. "Milho — 111" obrigava a ler um travessão
- * para descobrir onde terminava a cultura e começava a variedade.
- */
-function OpcaoDaLista({
-  titulo,
-  detalhe,
-  selecionada,
-  onPress,
-}: {
-  titulo: string;
-  detalhe: string | null;
-  selecionada: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <List.Item
-      title={titulo}
-      titleStyle={selecionada ? styles.opcaoTituloAtivo : styles.opcaoTitulo}
-      description={detalhe ?? undefined}
-      descriptionStyle={styles.muted}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected: selecionada }}
-      style={selecionada ? styles.opcaoAtiva : undefined}
-      right={(props) =>
-        selecionada ? (
-          <List.Icon {...props} icon="check" color={brand.primary} />
-        ) : null
-      }
-    />
   );
 }
 
@@ -447,8 +408,5 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
   flex: { flex: 1 },
   dialogArea: { paddingHorizontal: 0, maxHeight: 360 },
-  opcaoTitulo: { fontWeight: "500" },
-  opcaoTituloAtivo: { fontWeight: "700", color: brand.primary },
-  opcaoAtiva: { backgroundColor: brand.primaryLight },
   dialogEmpty: { color: brand.muted, padding: spacing.lg },
 });
