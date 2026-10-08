@@ -49,6 +49,24 @@ export function toIsoDate(date: Date = new Date()): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/**
+ * Formata o que o usuário digita como `dd/mm/aaaa`, descartando o resto.
+ *
+ * Só dígitos sobrevivem, e as barras entram sozinhas. Isso resolve dois
+ * problemas de uma vez: a API só aceita data, então letra ali nunca teve para
+ * onde ir; e digitar barra em teclado de celular é desconfortável justamente
+ * para quem está em campo, de pé, com a mão suja.
+ *
+ * Também protege da colagem: texto colado passa pelo mesmo filtro.
+ */
+export function maskDateInput(input: string): string {
+  const digitos = input.replace(/\D/g, "").slice(0, 8);
+
+  if (digitos.length <= 2) return digitos;
+  if (digitos.length <= 4) return `${digitos.slice(0, 2)}/${digitos.slice(2)}`;
+  return `${digitos.slice(0, 2)}/${digitos.slice(2, 4)}/${digitos.slice(4)}`;
+}
+
 /** Aceita `dd/MM/yyyy` ou `yyyy-MM-dd` e devolve `yyyy-MM-dd` — ou null. */
 export function parseDateInput(input: string): string | null {
   const trimmed = input.trim();

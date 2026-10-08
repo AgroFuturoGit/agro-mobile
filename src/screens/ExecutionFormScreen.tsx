@@ -11,6 +11,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Button, HelperText, Text, TextInput } from "react-native-paper";
 
+import { DateField } from "@/components/DateField";
 import { LocationMap } from "@/components/LocationMap";
 import { PhotoCapture } from "@/components/PhotoCapture";
 import { useSync } from "@/contexts/SyncContext";
@@ -322,13 +323,10 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
         </View>
 
         <View>
-          <TextInput
+          <DateField
             label="Data da colheita"
             value={harvestDate}
             onChangeText={setHarvestDate}
-            mode="outlined"
-            keyboardType="numbers-and-punctuation"
-            placeholder="dd/mm/aaaa"
             right={
               <TextInput.Icon
                 icon="calendar-today"
