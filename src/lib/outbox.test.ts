@@ -596,3 +596,57 @@ describe("anexos fotográficos na fila", () => {
     expect(streamKeyOf(foto1)).toBe(streamKeyOf(execucao));
   });
 });
+
+describe("concorrência e ordem no despacho", () => {
+  it("duas sincronizações simultâneas despacham o item uma vez só", async () => {
+    // O caso real: o login com fila pendente dispara `sync()` no mesmo instante
+    // em que a sincronização automática já começou. A trava anterior era um
+    // booleano atribuído depois de um `await`, e as duas chamadas passavam.
+    mockedRequest.mockResolvedValue({ id: "exec-1" });
+    await enqueue(executionCreate("plan-1", "ap concorrente"));
+
+    const [a, b] = await Promise.all([flushOutbox(), flushOutbox()]);
+
+    expect(mockedRequest).toHaveBeenCalledTimes(1);
+    // A segunda chamada recebe o resultado real da primeira, não um "ocupado".
+    expect(b).toEqual(a);
+    expect(getOutbox()).toHaveLength(0);
+  });
+
+  it("item em espera segura o resto do seu plano, e não só a si mesmo", async () => {
+    // Antes, o filtro de backoff vinha antes do agrupamento: o `create` em
+    // espera saía da rodada e o `update` seguia sozinho para um id que o
+    // servidor não conhece.
+    mockedRequest.mockRejectedValueOnce(new ApiError(500, "indisponível", null));
+    await enqueue(planCreate("local-p1"));
+    await flushOutbox();
+
+    expect(byLabel("Novo plano")?.nextAttemptAt).toBeGreaterThan(Date.now());
+
+    mockedRequest.mockReset();
+    mockedRequest.mockResolvedValue({ id: "plan-real" });
+    await enqueue(planUpdate("local-p1"));
+
+    await flushOutbox();
+
+    // Nada do plano sobe enquanto o `create` dele está esperando.
+    expect(mockedRequest).not.toHaveBeenCalled();
+    expect(getOutbox()).toHaveLength(2);
+  });
+
+  it("a espera de um plano não atrasa outro plano", async () => {
+    mockedRequest.mockRejectedValueOnce(new ApiError(500, "indisponível", null));
+    await enqueue(executionCreate("plan-a", "ap do A"));
+    await flushOutbox();
+
+    mockedRequest.mockReset();
+    mockedRequest.mockResolvedValue({ id: "exec-b" });
+    await enqueue(executionCreate("plan-b", "ap do B"));
+
+    await flushOutbox();
+
+    expect(calledPaths()).toEqual(["/production-plans/plan-b/executions"]);
+    expect(byLabel("ap do B")).toBeUndefined();
+    expect(byLabel("ap do A")).toBeDefined();
+  });
+});

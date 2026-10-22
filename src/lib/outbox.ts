@@ -278,7 +278,20 @@ export function streamKeyOf(entry: OutboxEntry): string {
   return `plan:${entry.meta.planId ?? entry.id}`;
 }
 
-let flushing = false;
+/**
+ * A execução em andamento, quando há uma.
+ *
+ * Era um booleano `flushing`, e ele não travava nada: só era atribuído depois
+ * de um `await`, então duas chamadas simultâneas passavam as duas pela guarda
+ * e despachavam a fila em dobro — o mesmo POST indo duas vezes. Acontecia de
+ * verdade quando o login com fila pendente coincidia com a sincronização
+ * automática.
+ *
+ * Guardar a promessa resolve os dois lados: a segunda chamada não dispara nada
+ * e ainda recebe o resultado real da primeira, em vez de um "ocupado" que não
+ * dizia nada a quem perguntou.
+ */
+let emAndamento: Promise<FlushResult> | null = null;
 
 /**
  * Envia a fila agrupada por recurso: dentro de um recurso, em ordem de
@@ -288,22 +301,25 @@ let flushing = false;
  * item: perda de rede e sessão inválida. Um problema específico de um recurso
  * bloqueia apenas aquele recurso.
  */
-export async function flushOutbox(): Promise<FlushResult> {
-  if (flushing) {
-    return {
-      outcome: "idle",
-      sent: 0,
-      failed: 0,
-      conflicted: 0,
-      remaining: getPendingCount(),
-    };
-  }
+export function flushOutbox(): Promise<FlushResult> {
+  emAndamento ??= despachar().finally(() => {
+    emAndamento = null;
+  });
+  return emAndamento;
+}
 
+async function despachar(): Promise<FlushResult> {
   await loadOutbox();
 
   const pending = entries.filter((entry) => entry.status === "pending");
   if (pending.length === 0) {
-    return { outcome: "synced", sent: 0, failed: 0, conflicted: 0, remaining: 0 };
+    return {
+      outcome: "synced",
+      sent: 0,
+      failed: 0,
+      conflicted: 0,
+      remaining: 0,
+    };
   }
 
   if (!isProbablyOnline(getConnectivity())) {
@@ -316,10 +332,38 @@ export async function flushOutbox(): Promise<FlushResult> {
     };
   }
 
-  // Itens ainda em backoff ficam de fora desta rodada.
+  /*
+   * Agrupa por recurso ANTES de olhar o backoff, e não depois.
+   *
+   * A ordem importava: filtrando primeiro, um item em espera saía da rodada e
+   * os seguintes do mesmo plano subiam sem ele. Um `create` que levou 5xx
+   * ficava para trás enquanto o `update` dele partia para
+   * `/production-plans/local-…`, levava 400 e a edição se perdia.
+   *
+   * Agrupando primeiro, cada recurso despacha apenas o trecho inicial que está
+   * pronto: ao encontrar um item esperando, o grupo inteiro para ali e espera
+   * com ele. Entre recursos diferentes nada muda — eles seguem independentes.
+   */
   const now = Date.now();
-  const ready = pending.filter((entry) => (entry.nextAttemptAt ?? 0) <= now);
-  if (ready.length === 0) {
+  const grupos = new Map<string, OutboxEntry[]>();
+  for (const entry of pending) {
+    const key = streamKeyOf(entry);
+    const grupo = grupos.get(key);
+    if (grupo) grupo.push(entry);
+    else grupos.set(key, [entry]);
+  }
+
+  const streams = new Map<string, string[]>();
+  for (const [key, grupo] of grupos) {
+    const prontos: string[] = [];
+    for (const entry of grupo) {
+      if ((entry.nextAttemptAt ?? 0) > now) break;
+      prontos.push(entry.id);
+    }
+    if (prontos.length > 0) streams.set(key, prontos);
+  }
+
+  if (streams.size === 0) {
     return {
       outcome: "partial",
       sent: 0,
@@ -329,16 +373,6 @@ export async function flushOutbox(): Promise<FlushResult> {
     };
   }
 
-  // Agrupa por recurso preservando a ordem de criação dentro de cada grupo.
-  const streams = new Map<string, string[]>();
-  for (const entry of ready) {
-    const key = streamKeyOf(entry);
-    const ids = streams.get(key);
-    if (ids) ids.push(entry.id);
-    else streams.set(key, [entry.id]);
-  }
-
-  flushing = true;
   const invalidated = new Set<string>();
   let sent = 0;
   let failed = 0;
@@ -346,96 +380,92 @@ export async function flushOutbox(): Promise<FlushResult> {
   let blockedStreams = 0;
   let outcome: FlushOutcome = "synced";
 
-  try {
-    streamLoop: for (const ids of streams.values()) {
-      for (const id of ids) {
-        // Relê do estado em vez de usar o objeto do agrupamento: um remap de
-        // id local feito nesta mesma rodada pode ter reescrito o `path`.
-        const entry = entries.find((item) => item.id === id);
-        if (!entry || entry.status !== "pending") continue;
+  streamLoop: for (const ids of streams.values()) {
+    for (const id of ids) {
+      // Relê do estado em vez de usar o objeto do agrupamento: um remap de
+      // id local feito nesta mesma rodada pode ter reescrito o `path`.
+      const entry = entries.find((item) => item.id === id);
+      if (!entry || entry.status !== "pending") continue;
 
-        try {
-          const result = entry.upload
-            ? await uploadAttachment(entry.upload, entry.path)
-            : await apiRequest<unknown>(entry.path, {
-                method: entry.method,
-                body: entry.body,
-                force: true,
-              });
+      try {
+        const result = entry.upload
+          ? await uploadAttachment(entry.upload, entry.path)
+          : await apiRequest<unknown>(entry.path, {
+              method: entry.method,
+              body: entry.body,
+              force: true,
+            });
 
-          entries = entries.filter((item) => item.id !== entry.id);
-          entry.invalidates.forEach((key) => invalidated.add(key));
-          sent += 1;
+        entries = entries.filter((item) => item.id !== entry.id);
+        entry.invalidates.forEach((key) => invalidated.add(key));
+        sent += 1;
 
-          /*
-           * Só agora o arquivo pode sair do aparelho.
-           *
-           * Apagá-lo antes do aceite — ao enfileirar, ou ao primeiro envio
-           * sem esperar a resposta — destruiria a única cópia da foto num
-           * item que ainda pode precisar ser reenviado.
-           */
-          if (entry.upload) discardAttachmentFile(entry.upload.uri);
+        /*
+         * Só agora o arquivo pode sair do aparelho.
+         *
+         * Apagá-lo antes do aceite — ao enfileirar, ou ao primeiro envio
+         * sem esperar a resposta — destruiria a única cópia da foto num
+         * item que ainda pode precisar ser reenviado.
+         */
+        if (entry.upload) discardAttachmentFile(entry.upload.uri);
 
-          // O create devolveu o id real. Quem ficou na fila apontando para o
-          // id local precisa passar a apontar para ele — senão o próximo item
-          // do mesmo plano bate num 404 e o registro se perde.
-          if (entry.kind === "plan.create" || entry.kind === "execution.create") {
-            const realId = idFromPayload(result);
-            if (realId !== null) remapLocalId(entry.id, realId, invalidated);
-          }
+        // O create devolveu o id real. Quem ficou na fila apontando para o
+        // id local precisa passar a apontar para ele — senão o próximo item
+        // do mesmo plano bate num 404 e o registro se perde.
+        if (entry.kind === "plan.create" || entry.kind === "execution.create") {
+          const realId = idFromPayload(result);
+          if (realId !== null) remapLocalId(entry.id, realId, invalidated);
+        }
 
-          await persist();
-        } catch (error) {
-          if (isOfflineError(error)) {
-            // Sem rede não há o que tentar em nenhum outro recurso.
-            outcome = "offline";
+        await persist();
+      } catch (error) {
+        if (isOfflineError(error)) {
+          // Sem rede não há o que tentar em nenhum outro recurso.
+          outcome = "offline";
+          break streamLoop;
+        }
+
+        if (error instanceof ApiError) {
+          if (error.status === 401 || error.status === 403) {
+            // Sessão inválida vale para a fila inteira.
+            outcome = "unauthorized";
+            await markError(entry.id, error.message, "pending");
             break streamLoop;
           }
 
-          if (error instanceof ApiError) {
-            if (error.status === 401 || error.status === 403) {
-              // Sessão inválida vale para a fila inteira.
-              outcome = "unauthorized";
-              await markError(entry.id, error.message, "pending");
-              break streamLoop;
-            }
+          if (error.status === 409) {
+            // Alteração concorrente: o item era válido, apenas perdeu a
+            // corrida. A versão do servidor vem no corpo e substitui o dado
+            // local; o item fica marcado para o usuário ver o que aconteceu,
+            // em vez de sumir em silêncio.
+            await applyServerVersion(entry, error.payload, invalidated);
+            await markError(entry.id, error.message, "conflict");
+            conflicted += 1;
+            // Ao contrário de um 4xx comum, aqui o recurso existe e está mais
+            // novo — as operações seguintes do mesmo plano seguem aplicáveis.
+            continue;
+          }
 
-            if (error.status === 409) {
-              // Alteração concorrente: o item era válido, apenas perdeu a
-              // corrida. A versão do servidor vem no corpo e substitui o dado
-              // local; o item fica marcado para o usuário ver o que aconteceu,
-              // em vez de sumir em silêncio.
-              await applyServerVersion(entry, error.payload, invalidated);
-              await markError(entry.id, error.message, "conflict");
-              conflicted += 1;
-              // Ao contrário de um 4xx comum, aqui o recurso existe e está mais
-              // novo — as operações seguintes do mesmo plano seguem aplicáveis.
-              continue;
-            }
-
-            if (error.status >= 500) {
-              // Problema do servidor: o item continua válido. Espera e tenta
-              // depois — e só este recurso fica bloqueado.
-              await markServerFailure(entry.id, error.message);
-              blockedStreams += 1;
-              continue streamLoop;
-            }
-
-            // 4xx: o item é inválido (plano apagado, dado recusado). Marca e
-            // pula o resto deste recurso, cujos itens dependiam dele.
-            await markError(entry.id, error.message, "failed");
-            failed += 1;
+          if (error.status >= 500) {
+            // Problema do servidor: o item continua válido. Espera e tenta
+            // depois — e só este recurso fica bloqueado.
+            await markServerFailure(entry.id, error.message);
+            blockedStreams += 1;
             continue streamLoop;
           }
 
-          await markServerFailure(entry.id, String(error));
-          blockedStreams += 1;
+          // 4xx: o item é inválido (plano apagado, dado recusado). Marca e
+          // pula o resto deste recurso, cujos itens dependiam dele.
+          await markError(entry.id, error.message, "failed");
+          failed += 1;
           continue streamLoop;
         }
+
+        await markServerFailure(entry.id, String(error));
+        blockedStreams += 1;
+        continue streamLoop;
       }
     }
-  } finally {
-    flushing = false;
   }
 
   if (invalidated.size > 0) notifyInvalidation([...invalidated]);

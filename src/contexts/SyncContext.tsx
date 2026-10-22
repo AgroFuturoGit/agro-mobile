@@ -93,24 +93,56 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Sincroniza sozinho quando a conexão volta. O ref evita disparar de novo a
-  // cada re-render enquanto o mesmo estado de rede persiste.
+  /*
+   * Sincroniza sozinho em três momentos, e só neles: quando a conexão volta,
+   * quando um item novo entra na fila, e quando a espera de um item vence.
+   *
+   * A versão anterior dependia de `syncing` e `lastSyncAt` e girava em falso.
+   * `lastSyncAt` só é preenchido quando algum item sobe, então uma rodada que
+   * falhava deixava a condição `!lastSyncAt` verdadeira; ao terminar, `syncing`
+   * voltava a `false`, o efeito disparava de novo, e assim indefinidamente. O
+   * QA mediu cerca de 1.570 requisições em 50 segundos.
+   *
+   * Comparar a contagem de pendentes com a anterior é o que substitui aquela
+   * condição sem reabrir o laço: uma rodada que falha não altera a contagem, e
+   * portanto não se redispara sozinha.
+   */
   const wasOnline = useRef(online);
-  useEffect(() => {
-    const canSync = status === "signed-in" && !sessionExpired;
-    const cameBackOnline = online && !wasOnline.current;
-    wasOnline.current = online;
+  const pendentesAntes = useRef(pendingCount);
 
-    if (
-      canSync &&
-      online &&
-      !syncing &&
-      pendingCount > 0 &&
-      (cameBackOnline || !lastSyncAt)
-    ) {
-      void sync();
-    }
-  }, [online, status, sessionExpired, syncing, pendingCount, lastSyncAt, sync]);
+  useEffect(() => {
+    const podeSincronizar = status === "signed-in" && !sessionExpired;
+    const voltouOnline = online && !wasOnline.current;
+    const entrouItemNovo = pendingCount > pendentesAntes.current;
+
+    wasOnline.current = online;
+    pendentesAntes.current = pendingCount;
+
+    if (!podeSincronizar || !online || pendingCount === 0) return;
+    if (voltouOnline || entrouItemNovo) void sync();
+  }, [online, status, sessionExpired, pendingCount, sync]);
+
+  /*
+   * O despertador do backoff.
+   *
+   * Sem ele, um item que levou 5xx ficaria esperando por um evento de rede ou
+   * pelo toque em "Sincronizar agora" — antes, era o próprio laço que acabava
+   * tentando de novo, por acidente. O relógio é armado para o item que vence
+   * primeiro, e uma só vez.
+   */
+  useEffect(() => {
+    if (status !== "signed-in" || sessionExpired || !online) return;
+
+    const esperas = entries
+      .filter((e) => e.status === "pending" && (e.nextAttemptAt ?? 0) > Date.now())
+      .map((e) => e.nextAttemptAt as number);
+
+    if (esperas.length === 0) return;
+
+    const atraso = Math.max(0, Math.min(...esperas) - Date.now()) + 250;
+    const relogio = setTimeout(() => void sync(), atraso);
+    return () => clearTimeout(relogio);
+  }, [entries, online, status, sessionExpired, sync]);
 
   const discard = useCallback(async (id: string) => {
     await discardEntry(id);
