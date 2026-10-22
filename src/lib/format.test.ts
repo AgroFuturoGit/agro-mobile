@@ -162,3 +162,39 @@ describe("maskDateInput", () => {
     expect(parseDateInput(maskDateInput("15092026"))).toBe("2026-09-15");
   });
 });
+
+describe("parseDecimal — entrada estrita", () => {
+  it("lê 0.500 como meio, não como quinhentos", () => {
+    // Muitos teclados Android só oferecem ponto. Lido como milhar, meio quilo
+    // virava 500 no banco.
+    expect(parseDecimal("0.500")).toBe(0.5);
+  });
+
+  it("continua lendo ponto como milhar quando é mesmo milhar", () => {
+    expect(parseDecimal("1.500")).toBe(1500);
+    expect(parseDecimal("12.345.678")).toBe(12345678);
+  });
+
+  it("recusa o que o Number aceitaria e ninguém digitou de propósito", () => {
+    expect(parseDecimal("0x10")).toBeNull();
+    expect(parseDecimal("1e3")).toBeNull();
+    expect(parseDecimal("Infinity")).toBeNull();
+    expect(parseDecimal("-Infinity")).toBeNull();
+  });
+
+  it("recusa pontuação incoerente", () => {
+    expect(parseDecimal("1,2,3")).toBeNull();
+    expect(parseDecimal("12.34.56")).toBeNull();
+    expect(parseDecimal("1.")).toBeNull();
+    expect(parseDecimal("abc")).toBeNull();
+  });
+
+  it("preserva o que já funcionava", () => {
+    expect(parseDecimal("12,345")).toBe(12.345);
+    expect(parseDecimal("1.234,56")).toBe(1234.56);
+    expect(parseDecimal("5.5")).toBe(5.5);
+    expect(parseDecimal("-3,5")).toBe(-3.5);
+    expect(parseDecimal(" 10 ")).toBe(10);
+    expect(parseDecimal(",5")).toBe(0.5);
+  });
+});

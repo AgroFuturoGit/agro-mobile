@@ -115,19 +115,40 @@ export function parseDecimal(input: string): number | null {
   if (!trimmed) return null;
 
   const normalized = trimmed.includes(",")
-    ? trimmed.replace(/\./g, "").replace(",", ".")
+    ? // A vírgula é sempre o separador decimal; o ponto, se houver, é milhar.
+      trimmed.replace(/\./g, "").replace(",", ".")
     : looksLikeThousandGroups(trimmed)
       ? trimmed.replace(/\./g, "")
       : trimmed;
+
+  /*
+   * Validar antes de converter, e não confiar no `Number`.
+   *
+   * Ele aceita muito mais do que um campo de quantidade deveria: `0x10` vira
+   * 16, `1e3` vira 1000 e `Infinity` vira infinito. Nada disso é algo que
+   * alguém digitou querendo dizer uma quantidade colhida — e todos passavam
+   * direto para o banco.
+   */
+  if (!PLAIN_NUMBER.test(normalized)) return null;
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
 /** `1.234` e `1.234.567` são milhar; `12.5` e `1.2345` não. */
+/**
+ * Grupos de milhar: `1.500`, `12.345.678`.
+ *
+ * O primeiro grupo nunca começa com zero — ninguém escreve quinhentos como
+ * "0.500". Sem essa restrição, quem digitasse meio quilo num teclado que só
+ * tem ponto via o app gravar 500.
+ */
 function looksLikeThousandGroups(value: string): boolean {
-  return /^-?\d{1,3}(\.\d{3})+$/.test(value);
+  return /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(value);
 }
+
+/** O que sobra depois de normalizar precisa ser isto, e nada além. */
+const PLAIN_NUMBER = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 
 export function formatCpf(cpf: string | null | undefined): string {
   if (!cpf) return "—";
