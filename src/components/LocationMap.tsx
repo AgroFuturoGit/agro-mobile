@@ -8,16 +8,11 @@ import type { Coordinates } from "@/lib/location";
 import { brand, spacing } from "@/theme";
 
 /**
- * Mapa embutido com OpenStreetMap, desenhado numa WebView com Leaflet.
+ * Mapa com OpenStreetMap numa WebView. A alternativa, `react-native-maps`,
+ * exigiria projeto no Google Cloud, chave de API e cartão cadastrado.
  *
- * É um experimento. O caminho alternativo seria `react-native-maps` com o Maps
- * SDK do Google: o SDK móvel não é cobrado, mas exige projeto no Google Cloud,
- * chave de API, cartão cadastrado na conta de faturamento e rebuild do APK.
- * Leaflet com tiles do OpenStreetMap não pede nada disso.
- *
- * O preço é outro: os tiles vêm da rede. Sem conexão o mapa não desenha — e é
- * em campo, sem sinal, que o agricultor está. Por isso a mensagem de erro
- * explica o que aconteceu em vez de deixar um quadrado cinza.
+ * O preço é que os tiles vêm da rede, e é sem sinal que o agricultor está —
+ * por isso o erro explica o que houve em vez de deixar um quadrado cinza.
  */
 export function LocationMap({
   coordinates,

@@ -11,9 +11,8 @@ export type MutationResult<T> = {
 };
 
 type MutationInput<T> = {
-  /** Chamada real à API. */
   request: () => Promise<T>;
-  /** Como a operação deve ser enfileirada caso não haja conexão. */
+  /** Como enfileirar a operação se não houver conexão. */
   queue: Omit<
     OutboxEntry,
     "id" | "createdAt" | "attempts" | "lastError" | "status"
@@ -34,9 +33,8 @@ export async function mutate<T>({
   if (isProbablyOnline(getConnectivity())) {
     try {
       const data = await request();
-      // Só avisa quem está na tela: o cache antigo continua no lugar até a
-      // releitura chegar. Apagá-lo aqui faria a tela piscar vazia — e ficar
-      // vazia de vez se a releitura falhasse.
+      // Avisa quem está na tela sem apagar o cache: apagar faria a tela
+      // piscar vazia, e ficar vazia se a releitura falhasse.
       notifyInvalidation(queue.invalidates);
       return { synced: true, data, entry: null };
     } catch (error) {

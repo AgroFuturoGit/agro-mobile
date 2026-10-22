@@ -4,14 +4,9 @@ import { TextInput } from "react-native-paper";
 import { maskDateInput } from "@/lib/format";
 
 /**
- * Campo de data.
- *
- * Existe porque `keyboardType="numbers-and-punctuation"` é exclusivo do iOS:
- * no Android — que é onde o APK roda — ele cai no teclado de texto comum, e
- * nada impedia de digitar letra num campo que a API só aceita como data.
- *
- * `number-pad` vale nas duas plataformas, e a máscara cuida do resto: filtra
- * o que não for dígito, inclusive em texto colado, e põe as barras sozinha.
+ * Campo de data. `numbers-and-punctuation` é exclusivo do iOS e, no Android,
+ * cai no teclado de texto — nada impedia letra num campo que a API só aceita
+ * como data. `number-pad` vale nos dois, e a máscara filtra o resto.
  */
 export function DateField({
   label,

@@ -38,17 +38,9 @@ export const theme = {
     error: brand.danger,
     errorContainer: brand.dangerLight,
     /*
-     * Sem isto, toda superfície elevada do app sai lilás.
-     *
-     * O Paper tinge superfícies elevadas com a cor primária, mas as cores já
-     * vêm calculadas no `MD3LightTheme` — `level3` é literalmente
-     * `rgb(238, 232, 244)`, derivado do roxo padrão do Material. Sobrescrever
-     * `primary` não as recalcula, então o diálogo, a barra de busca e o menu
-     * continuavam puxando para o roxo enquanto o resto do app era verde.
-     *
-     * Os três primeiros níveis ficam brancos: é o que o design entregou para
-     * cartões, busca e diálogos. Acima disso, um verde quase imperceptível,
-     * para que a elevação ainda se distinga sem trair a paleta.
+     * Sem isto, toda superfície elevada sai lilás: as cores do `MD3LightTheme`
+     * já vêm calculadas do roxo padrão (`level3` é `rgb(238, 232, 244)`), e
+     * sobrescrever `primary` não as recalcula.
      */
     elevation: {
       level0: "transparent",

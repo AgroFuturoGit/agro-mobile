@@ -99,16 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * Confere a sessão contra a API (`GET /auth/me`).
+   * Revalida a sessão: o usuário salvo é uma foto do login, e um papel
+   * alterado pelo administrador só chegaria no próximo.
    *
-   * O usuário guardado no aparelho é uma foto do momento do login: um papel
-   * alterado pelo administrador só chegaria aqui no próximo login. Revalidar
-   * ao abrir o app e ao recuperar sinal mantém as permissões da tela em dia.
-   *
-   * Falha de rede não muda nada — o dado local continua sendo o melhor que
-   * existe. Só um 401 explícito derruba a sessão; o backend responde 500 para
-   * token expirado (ver Limitações no README), e 500 não é motivo para
-   * desautenticar ninguém.
+   * Falha de rede não muda nada, e só um 401 derruba a sessão — o backend
+   * responde 500 para token expirado (ver Limitações no README).
    */
   const revalidate = useCallback(async () => {
     if (tokenRef.current === null) return;

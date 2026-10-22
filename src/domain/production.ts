@@ -397,7 +397,9 @@ export function updateProductionExecution(
     harvestDate: payload.harvestDate,
     // Espelha a regra do backend: apagar é explícito, recapturar substitui a
     // leitura inteira, e não mandar nada preserva o que já estava lá.
-    latitude: payload.clearLocation ? null : (payload.latitude ?? execution.latitude),
+    latitude: payload.clearLocation
+      ? null
+      : (payload.latitude ?? execution.latitude),
     longitude: payload.clearLocation
       ? null
       : (payload.longitude ?? execution.longitude),
@@ -454,16 +456,10 @@ export function deleteProductionExecution(
 }
 
 /**
- * Enfileira o envio das fotos de um apontamento.
- *
- * Sempre pela fila, mesmo com rede disponível. Não é desencargo: o upload
- * depende do apontamento já existir no servidor, e quando ele foi criado
- * offline o id ainda é provisório. Deixar os dois no mesmo recurso da fila
- * garante que a foto só suba depois do apontamento — e que o `local-...` no
- * caminho já tenha sido trocado pelo id real.
- *
- * O retentar com espera crescente, que a imagem exige mais que o JSON por
- * subir em rede instável, vem de graça por estar na fila.
+ * Sempre pela fila, mesmo com rede: o upload depende de o apontamento já
+ * existir no servidor, e criado offline o id dele ainda é provisório. No mesmo
+ * recurso da fila, a foto só sobe depois dele e com o id já trocado — e o
+ * retentar com espera crescente vem junto.
  */
 export async function enqueueExecutionAttachments(
   executionId: string,
@@ -497,9 +493,7 @@ export function overlayPlans(
 ): ProductionPlan[] {
   // `plan.update`/`plan.delete` também gravam `farmerId` em `meta`, então
   // um filtro só cobre criação, edição e exclusão.
-  const pending = entries.filter(
-    (entry) => entry.meta.farmerId === farmerId,
-  );
+  const pending = entries.filter((entry) => entry.meta.farmerId === farmerId);
 
   let result = [...cached];
 

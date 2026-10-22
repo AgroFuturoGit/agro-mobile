@@ -94,18 +94,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /*
-   * Sincroniza sozinho em três momentos, e só neles: quando a conexão volta,
-   * quando um item novo entra na fila, e quando a espera de um item vence.
-   *
-   * A versão anterior dependia de `syncing` e `lastSyncAt` e girava em falso.
+   * Três gatilhos, e só eles: a conexão voltar, um item novo entrar, a espera
+   * de um item vencer. Depender de `syncing` e `lastSyncAt` girava em falso —
    * `lastSyncAt` só é preenchido quando algum item sobe, então uma rodada que
-   * falhava deixava a condição `!lastSyncAt` verdadeira; ao terminar, `syncing`
-   * voltava a `false`, o efeito disparava de novo, e assim indefinidamente. O
-   * QA mediu cerca de 1.570 requisições em 50 segundos.
+   * falhava se redisparava indefinidamente (1.570 requisições em 50 s).
    *
-   * Comparar a contagem de pendentes com a anterior é o que substitui aquela
-   * condição sem reabrir o laço: uma rodada que falha não altera a contagem, e
-   * portanto não se redispara sozinha.
+   * Comparar a contagem de pendentes não reabre o laço: uma rodada que falha
+   * não altera a contagem.
    */
   const wasOnline = useRef(online);
   const pendentesAntes = useRef(pendingCount);
@@ -123,18 +118,16 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   }, [online, status, sessionExpired, pendingCount, sync]);
 
   /*
-   * O despertador do backoff.
-   *
-   * Sem ele, um item que levou 5xx ficaria esperando por um evento de rede ou
-   * pelo toque em "Sincronizar agora" — antes, era o próprio laço que acabava
-   * tentando de novo, por acidente. O relógio é armado para o item que vence
-   * primeiro, e uma só vez.
+   * Despertador do backoff: sem ele, um item que levou 5xx esperaria por um
+   * evento de rede ou pelo botão — antes era o laço que tentava, por acidente.
    */
   useEffect(() => {
     if (status !== "signed-in" || sessionExpired || !online) return;
 
     const esperas = entries
-      .filter((e) => e.status === "pending" && (e.nextAttemptAt ?? 0) > Date.now())
+      .filter(
+        (e) => e.status === "pending" && (e.nextAttemptAt ?? 0) > Date.now(),
+      )
       .map((e) => e.nextAttemptAt as number);
 
     if (esperas.length === 0) return;
