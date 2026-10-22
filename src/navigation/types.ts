@@ -25,11 +25,8 @@ export type TabsParamList = {
 
 export type RootStackParamList = {
   Tabs: NavigatorScreenParams<TabsParamList>;
-  /**
-   * Formulários entram como modal a partir de qualquer aba. As entidades são
-   * passadas inteiras (JSON puro) para que a edição funcione offline, sem
-   * depender de uma releitura da API.
-   */
+  // Entidades vão inteiras na rota para que a edição funcione offline, sem
+  // depender de releitura da API.
   PlanForm: { farmerId: string; plan?: ProductionPlan };
   ExecutionForm: { plan: ProductionPlan; execution?: ProductionExecution };
   Reauth: undefined;
@@ -37,8 +34,7 @@ export type RootStackParamList = {
 
 declare global {
   namespace ReactNavigation {
-    // Interface vazia de propósito: é assim que o React Navigation espera a
-    // augmentação da lista de rotas raiz.
+    // Vazia de propósito: é como o React Navigation espera a augmentação.
     // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     interface RootParamList extends RootStackParamList {}
   }

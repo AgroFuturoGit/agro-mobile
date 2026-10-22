@@ -3,7 +3,12 @@ import { Image, Modal, Pressable, StyleSheet, View } from "react-native";
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { ActivityIndicator, Button, IconButton, Text } from "react-native-paper";
+import {
+  ActivityIndicator,
+  Button,
+  IconButton,
+  Text,
+} from "react-native-paper";
 
 import {
   type Attachment,
@@ -20,12 +25,8 @@ type Props = {
 };
 
 /**
- * Captura de comprovações fotográficas do apontamento.
- *
- * A permissão de câmera é pedida no toque do botão, não na abertura da tela:
- * quem acabou de digitar a quantidade colhida entende por que o app quer a
- * câmera; quem só abriu o formulário, não. E negar não interrompe nada — o
- * apontamento segue sendo salvo sem foto.
+ * A permissão é pedida no toque do botão, não ao abrir a tela: ali o pedido
+ * faz sentido. Negar não interrompe nada — o apontamento é salvo sem foto.
  */
 export function PhotoCapture({
   attachments,

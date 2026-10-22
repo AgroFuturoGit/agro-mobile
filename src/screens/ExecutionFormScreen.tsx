@@ -63,10 +63,8 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
   const [submitting, setSubmitting] = useState(false);
 
   /**
-   * A posição que o apontamento já carrega, quando se está editando. Ela é o
-   * registro de onde a colheita foi apontada em campo — abrir a edição não pode
-   * substituí-la pela posição de agora, que é só onde o aparelho está no momento
-   * de corrigir um número.
+   * A posição já gravada, ao editar. É o registro de onde a colheita foi
+   * apontada: abrir a edição não pode trocá-la pela posição de agora.
    */
   const localizacaoSalva: LocationResult | null =
     execution && execution.latitude !== null && execution.longitude !== null
@@ -101,22 +99,15 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
   }>({});
 
   /**
-   * Fotos tiradas nesta sessão, ainda não enfileiradas.
-   *
-   * Enquanto estiverem aqui, os arquivos já existem no disco mas não pertencem
-   * a ninguém: sair sem salvar precisa apagá-los, ou o aparelho acumula
-   * comprovação de apontamento que nunca foi registrado.
+   * Fotos desta sessão, ainda sem dono: já estão no disco, mas não foram
+   * enfileiradas. Sair sem salvar precisa apagá-las.
    */
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const entregues = useRef(false);
 
-  // A permissão é pedida ao abrir o formulário, não no boot do app: o usuário
-  // entende o pedido quando ele chega junto da ação que o justifica. A leitura
-  // já começa aqui para que, na hora de salvar, a posição normalmente esteja
-  // pronta e o botão não precise esperar.
-  //
-  // Quando o apontamento já tem posição, nada é capturado: a tela mostra a que
-  // está gravada, e só o botão "Atualizar" a substitui.
+  // A leitura começa ao abrir o formulário para que, ao salvar, a posição já
+  // esteja pronta. Tendo posição gravada, nada é capturado — só "Atualizar"
+  // a substitui.
   useEffect(() => {
     if (localizacaoSalva) return;
 
@@ -130,12 +121,9 @@ export function ExecutionFormScreen({ route, navigation }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /*
-   * A limpeza da desmontagem roda uma vez só e, por isso, não pode depender de
-   * `attachments`: leria a lista vazia do primeiro render. O espelho em ref é
-   * atualizado por efeito, e não durante o render, para que o React continue
-   * livre para descartar uma renderização sem deixar o espelho adiantado.
-   */
+  // A limpeza roda uma vez só, então não pode depender de `attachments` —
+  // leria a lista vazia do primeiro render. O espelho é atualizado por efeito,
+  // nunca durante o render.
   const attachmentsRef = useRef<Attachment[]>([]);
   useEffect(() => {
     attachmentsRef.current = attachments;

@@ -4,20 +4,14 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { ApiError, getApiBaseUrl, getAuthToken, OfflineError } from "@/lib/api";
 
 /**
- * Uma foto já guardada no aparelho, pronta para subir quando houver rede.
- *
- * `uri` aponta para o diretório do aplicativo, não para o cache: o arquivo
- * precisa sobreviver ao fechamento do app e à limpeza que o sistema faz do
- * cache, porque entre tirar a foto em campo e conseguir sinal podem passar
- * dias.
+ * Foto guardada no aparelho, à espera de rede. Fica no diretório do app e não
+ * no cache: entre fotografar em campo e ter sinal podem passar dias, e o
+ * sistema esvazia o cache quando quer.
  */
 export type Attachment = {
   /**
-   * Identificador gerado aqui, antes do primeiro envio.
-   *
-   * É o que torna o upload seguro para repetir: se a resposta se perder na
-   * rede depois de o servidor já ter gravado, a tentativa seguinte chega com
-   * a mesma chave e recebe de volta o anexo existente, em vez de criar outro.
+   * Gerado antes do primeiro envio: se a resposta se perder depois de o
+   * servidor gravar, o reenvio recebe o anexo existente em vez de criar outro.
    */
   clientId: string;
   uri: string;
@@ -31,13 +25,8 @@ export type Attachment = {
 export const MAX_ATTACHMENTS_PER_EXECUTION = 5;
 
 /**
- * Largura máxima da imagem guardada.
- *
- * A câmera de um celular comum entrega algo em torno de 4000 px e 4 MB. Isso
- * é resolução muito além do que comprova uma praga ou uma nota fiscal, e o
- * custo aparece duas vezes: no armazenamento do aparelho, que é escasso, e no
- * upload, feito por rede móvel instável. 1280 px mantém o detalhe legível e
- * derruba o arquivo para a casa das centenas de kB.
+ * A câmera entrega perto de 4000 px e 4 MB — muito além do que comprova uma
+ * praga, e caro duas vezes: no armazenamento e no upload por rede móvel.
  */
 const MAX_WIDTH = 1280;
 
@@ -46,25 +35,14 @@ const COMPRESSION = 0.6;
 
 const MIME_TYPE = "image/jpeg";
 
-/**
- * Onde os anexos ficam até serem enviados.
- *
- * Subdiretório próprio, e não a raiz do diretório do app, para que a coleta
- * de lixo saiba exatamente o que lhe pertence.
- */
+/** Subdiretório próprio, para que a coleta de lixo saiba o que lhe pertence. */
 function attachmentsDirectory(): Directory {
   const dir = new Directory(Paths.document, "attachments");
   if (!dir.exists) dir.create({ intermediates: true });
   return dir;
 }
 
-/**
- * UUID v4 a partir de `Math.random`.
- *
- * Não é aleatoriedade criptográfica, e aqui não precisa ser: este valor é uma
- * chave de deduplicação dentro de um apontamento, não um segredo. Evita
- * acrescentar dependência para gerar um identificador.
- */
+/** Chave de deduplicação, não segredo — `Math.random` basta e evita dependência. */
 function randomUuid(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
@@ -74,11 +52,8 @@ function randomUuid(): string {
 }
 
 /**
- * Comprime a foto recém-tirada e a move para o diretório do aplicativo.
- *
- * A câmera entrega o arquivo no cache, que o sistema pode esvaziar a qualquer
- * momento. Enquanto a foto não subiu, ela é o próprio registro — perder o
- * arquivo é perder a comprovação que o agricultor foi até o talhão fazer.
+ * Comprime e move para o diretório do app. A câmera entrega no cache, que o
+ * sistema esvazia quando quer — e até subir, a foto é a própria comprovação.
  */
 export async function persistCapturedPhoto(
   sourceUri: string,
@@ -110,12 +85,8 @@ export async function persistCapturedPhoto(
 }
 
 /**
- * Apaga o arquivo local do anexo.
- *
- * Nunca lança: é chamada tanto quando o usuário remove a foto antes de salvar
- * quanto depois de o servidor confirmar o recebimento. Em nenhum dos dois
- * casos uma falha de escrita pode derrubar o fluxo — no segundo, o dado já
- * está salvo no servidor, e o pior resultado é um arquivo órfão.
+ * Nunca lança: falha de escrita não pode derrubar o fluxo nem ao remover antes
+ * de salvar, nem depois do aceite — ali o pior resultado é um arquivo órfão.
  */
 export function discardAttachmentFile(uri: string): void {
   try {
@@ -127,17 +98,13 @@ export function discardAttachmentFile(uri: string): void {
 }
 
 /**
- * Sobe a imagem para a API em `multipart/form-data`.
+ * Sobe em `multipart/form-data` por fora do `apiRequest`: ali o corpo vira
+ * JSON, e carregar a foto na memória para convertê-la em texto estoura a
+ * memória de um aparelho modesto. `File.upload` envia em fluxo pelo nativo.
  *
- * Não passa por `apiRequest` de propósito: ali o corpo é serializado em JSON,
- * e carregar uma foto para a memória só para convertê-la em texto é o caminho
- * mais rápido para estourar a memória de um aparelho modesto. `File.upload`
- * faz o envio no lado nativo, lendo o arquivo em fluxo.
- *
- * Em compensação, o tratamento de erro precisa ser refeito aqui: a função
- * devolve o status em vez de lançar. Traduzir de volta para `ApiError` e
- * `OfflineError` é o que permite à fila reaproveitar, sem mudança, a lógica
- * que já distingue conflito, recusa e falha de servidor.
+ * O preço é refazer o erro aqui: ele devolve status em vez de lançar, e a
+ * tradução para `ApiError`/`OfflineError` é o que deixa a fila reaproveitar
+ * sem mudança a lógica de conflito, recusa e falha de servidor.
  */
 export async function uploadAttachment(
   attachment: Attachment,
@@ -146,8 +113,7 @@ export async function uploadAttachment(
   const file = new File(attachment.uri);
 
   if (!file.exists) {
-    // O arquivo sumiu — cache limpo pelo sistema, usuário apagou pelo gerenciador
-    // de arquivos. Reenviar não resolve, então vale como recusa definitiva.
+    // Sumiu do disco: reenviar não resolve, então vale como recusa definitiva.
     throw new ApiError(422, "A foto não está mais salva no aparelho.", null);
   }
 

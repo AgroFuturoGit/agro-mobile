@@ -51,12 +51,9 @@ export function LoginScreen({ mode = "initial", onSuccess, onCancel }: Props) {
     password?: string;
   }>({});
 
-  // O endereço da API também é editável aqui, não só no Perfil.
-  //
-  // Num APK standalone o `hostUri` do Expo não existe, então a detecção
-  // automática cai no `localhost` — que no celular é o próprio aparelho. Sem
-  // este campo o usuário não conseguiria entrar nem chegar ao Perfil, que
-  // fica atrás do login: ficaria preso sem nenhuma saída pela interface.
+  // Editável aqui, e não só no Perfil: num APK o `hostUri` não existe e a
+  // detecção cai em `localhost`. Sem este campo, o usuário não entraria nem
+  // chegaria ao Perfil, que fica atrás do login.
   const [serverDialog, setServerDialog] = useState(false);
   const [serverUrl, setServerUrl] = useState(getApiBaseUrl());
   const [currentUrl, setCurrentUrl] = useState(getApiBaseUrl());

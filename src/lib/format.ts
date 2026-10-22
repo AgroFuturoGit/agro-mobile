@@ -1,9 +1,6 @@
 /**
- * Formatadores pt-BR sem depender de `Intl`.
- *
- * O suporte a `Intl` varia entre Hermes/JSC e versões de Android, e número
- * errado numa tela de produção agrícola é pior do que feio — então a
- * formatação é feita à mão.
+ * Formatadores pt-BR à mão: o suporte a `Intl` varia entre Hermes, JSC e
+ * versões do Android, e número errado num apontamento é pior do que feio.
  */
 
 export function formatNumber(value: number, fractionDigits = 2): string {
@@ -50,14 +47,9 @@ export function toIsoDate(date: Date = new Date()): string {
 }
 
 /**
- * Formata o que o usuário digita como `dd/mm/aaaa`, descartando o resto.
- *
- * Só dígitos sobrevivem, e as barras entram sozinhas. Isso resolve dois
- * problemas de uma vez: a API só aceita data, então letra ali nunca teve para
- * onde ir; e digitar barra em teclado de celular é desconfortável justamente
- * para quem está em campo, de pé, com a mão suja.
- *
- * Também protege da colagem: texto colado passa pelo mesmo filtro.
+ * Só dígitos sobrevivem — inclusive em texto colado — e as barras entram
+ * sozinhas. A API só aceita data, e digitar barra no celular é desconfortável
+ * para quem está em campo, de pé.
  */
 export function maskDateInput(input: string): string {
   const digitos = input.replace(/\D/g, "").slice(0, 8);
@@ -99,16 +91,9 @@ function isRealDate(iso: string): boolean {
 }
 
 /**
- * Aceita vírgula decimal (teclado pt-BR) e também ponto decimal.
- *
- * O ponto é ambíguo em pt-BR: `1.234` é milhar, `12.5` é decimal. Remover todo
- * ponto sem olhar o contexto transformava `12.5` em `125` — um erro de dez
- * vezes num apontamento de colheita, gravado sem aviso nenhum.
- *
- * Regra aplicada:
- * - havendo vírgula, ela é o decimal e os pontos são milhar (`1.234,56`);
- * - sem vírgula, o ponto só é milhar quando separa grupos de exatamente três
- *   dígitos (`1.234`, `1.234.567`); nos outros casos é decimal (`12.5`, `0.75`).
+ * O ponto é ambíguo em pt-BR: `1.234` é milhar, `12.5` é decimal. Havendo
+ * vírgula, ela é o decimal e os pontos são milhar; sem vírgula, o ponto só é
+ * milhar quando separa grupos de exatamente três dígitos.
  */
 export function parseDecimal(input: string): number | null {
   const trimmed = input.trim();
@@ -121,14 +106,8 @@ export function parseDecimal(input: string): number | null {
       ? trimmed.replace(/\./g, "")
       : trimmed;
 
-  /*
-   * Validar antes de converter, e não confiar no `Number`.
-   *
-   * Ele aceita muito mais do que um campo de quantidade deveria: `0x10` vira
-   * 16, `1e3` vira 1000 e `Infinity` vira infinito. Nada disso é algo que
-   * alguém digitou querendo dizer uma quantidade colhida — e todos passavam
-   * direto para o banco.
-   */
+  // Validar antes de converter: o `Number` aceita `0x10`, `1e3` e `Infinity`,
+  // e todos passavam direto para o banco.
   if (!PLAIN_NUMBER.test(normalized)) return null;
 
   const parsed = Number(normalized);
@@ -137,11 +116,8 @@ export function parseDecimal(input: string): number | null {
 
 /** `1.234` e `1.234.567` são milhar; `12.5` e `1.2345` não. */
 /**
- * Grupos de milhar: `1.500`, `12.345.678`.
- *
- * O primeiro grupo nunca começa com zero — ninguém escreve quinhentos como
- * "0.500". Sem essa restrição, quem digitasse meio quilo num teclado que só
- * tem ponto via o app gravar 500.
+ * Grupos de milhar. O primeiro nunca começa com zero: sem isso, quem digitasse
+ * meio quilo num teclado que só tem ponto via o app gravar 500.
  */
 function looksLikeThousandGroups(value: string): boolean {
   return /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(value);

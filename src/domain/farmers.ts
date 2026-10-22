@@ -123,14 +123,9 @@ export type FarmerDiscovery = {
 };
 
 /**
- * Como cada papel descobre os agricultores que pode ver.
- *
- * O backend não tem uma rota única: ADMIN e MANAGER listam por `/farmers`,
- * o TECHNICIAN só alcança os que lhe foram atribuídos. Concentrar a escolha
- * aqui evita que a tela precise conhecer as regras de `@PreAuthorize`.
- *
- * FARMER não passa por aqui — cai direto nos próprios planos via
- * `fetchMyFarmer`. `null` significa "este papel não seleciona agricultor".
+ * Como cada papel descobre os agricultores que vê. Não há rota única: ADMIN e
+ * MANAGER usam `/farmers`, TECHNICIAN só os atribuídos, e FARMER cai direto
+ * nos próprios planos. `null` = este papel não seleciona agricultor.
  */
 export function farmerDiscoveryFor(
   role: Role | null | undefined,

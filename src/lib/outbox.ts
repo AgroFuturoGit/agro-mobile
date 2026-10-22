@@ -18,10 +18,8 @@ export type OutboxKind =
   | "attachment.upload";
 
 /**
- * `failed` e `conflict` são estados distintos de propósito: o primeiro diz que
- * a operação é inválida e precisa ser corrigida ou descartada; o segundo, que
- * ela era válida e apenas perdeu a corrida para outra edição. Só `pending`
- * volta a ser despachado automaticamente.
+ * `failed` é operação inválida, a corrigir ou descartar; `conflict` era válida
+ * e só perdeu a corrida. Só `pending` volta a ser despachado sozinho.
  */
 export type OutboxStatus = "pending" | "failed" | "conflict";
 
@@ -35,39 +33,26 @@ export type OutboxEntry = {
   /** Texto curto exibido na tela de sincronização. */
   label: string;
   /**
-   * A entidade como ela deve aparecer localmente enquanto não sincroniza.
-   * O `body` precisa ter exatamente o shape que a API espera, então o que a
-   * tela mostra (nome da cultura, rótulo da safra) vive aqui à parte.
+   * Como a entidade aparece na tela enquanto não sincroniza. Vive à parte
+   * porque `body` precisa ter exatamente o formato que a API espera.
    */
   snapshot?: unknown;
   createdAt: number;
   /**
-   * Versão do recurso que o usuário tinha em mãos quando editou — diferente de
-   * `createdAt`, que é só o instante em que a operação entrou na fila.
-   *
-   * É essa versão que o servidor compara para detectar alteração concorrente.
-   * Comparar contra o instante da edição não funcionaria: um registro feito
-   * offline chega sempre com carimbo mais recente que o do servidor, então
-   * venceria toda disputa e o conflito nunca apareceria.
+   * Versão que o usuário tinha em mãos ao editar, e é o que o servidor compara.
+   * O instante da edição não serviria: feito offline, ele chega sempre mais
+   * recente que o do servidor e venceria toda disputa.
    */
   baseUpdatedAt?: string | null;
   /**
-   * A foto a enviar, quando o item é um anexo.
-   *
-   * Fica fora de `body` porque não é JSON: o despacho lê o arquivo do disco e
-   * sobe em `multipart/form-data`. Enquanto este campo existir e o item não
-   * tiver sido aceito, o arquivo apontado por `upload.uri` é a única cópia da
-   * comprovação — ele só pode ser apagado depois do aceite do servidor.
+   * Fora de `body` porque não é JSON: o despacho lê do disco e sobe em
+   * multipart. Até o aceite, `upload.uri` é a única cópia da comprovação.
    */
   upload?: Attachment;
   attempts: number;
   lastError: string | null;
   status: OutboxStatus;
-  /**
-   * Momento a partir do qual vale tentar de novo (backoff após falha de
-   * servidor). Ausente em itens gravados antes deste campo existir — o `?? 0`
-   * na leitura trata esse caso como "pode tentar agora".
-   */
+  /** Quando vale tentar de novo. Ausente em itens antigos; `?? 0` os libera. */
   nextAttemptAt?: number;
   meta: {
     farmerId?: string;
@@ -79,11 +64,8 @@ export type OutboxEntry = {
 };
 
 /**
- * Como gravar localmente a versão que o servidor devolveu no 409.
- *
- * A fila não sabe interpretar o corpo de cada recurso — isso é do domínio. Para
- * não inverter a dependência (o domínio já importa a fila), quem sabe mapear se
- * registra aqui no boot, no mesmo padrão de `setTokenProvider`.
+ * Como gravar a versão que o servidor devolveu no 409. Interpretar o corpo é
+ * do domínio, que já importa a fila — então ele se registra aqui no boot.
  */
 export type ConflictReconciler = (
   entry: OutboxEntry,
@@ -187,8 +169,7 @@ export async function enqueue(
 }
 
 export async function discardEntry(id: string): Promise<void> {
-  // Descartar o item é a decisão de não enviar aquela foto. Deixar o arquivo
-  // para trás seria guardar no aparelho algo que nunca mais vai subir.
+  // Descartar é decidir não enviar: o arquivo não tem mais por que ficar.
   const entry = entries.find((item) => item.id === id);
   if (entry?.upload) discardAttachmentFile(entry.upload.uri);
 
@@ -196,10 +177,7 @@ export async function discardEntry(id: string): Promise<void> {
   await persist();
 }
 
-/**
- * Reenvio pedido pelo usuário: sai do backoff e zera o contador de tentativas.
- * Quem aperta "tentar de novo" quer uma tentativa agora, não daqui a 30 min.
- */
+/** Quem aperta "tentar de novo" quer agora, não daqui a 30 min. */
 export async function retryEntry(id: string): Promise<void> {
   entries = entries.map((entry) =>
     entry.id === id
@@ -246,11 +224,7 @@ export type FlushResult = {
   remaining: number;
 };
 
-/**
- * Falhas de servidor (5xx ou erro desconhecido) que um item aceita antes de
- * parar de tentar sozinho e passar a exigir reenvio manual. Sem esse teto, um
- * item que o servidor nunca aceita fica em rodízio infinito.
- */
+/** Sem esse teto, um item que o servidor nunca aceita fica em rodízio infinito. */
 export const MAX_SERVER_ATTEMPTS = 5;
 
 const BACKOFF_BASE_MS = 30_000;
@@ -263,43 +237,25 @@ export function backoffFor(attempts: number): number {
 }
 
 /**
- * Recurso a que o item pertence.
+ * Recurso a que o item pertence. A ordem só importa dentro de um recurso: um
+ * 5xx no plano A não pode segurar o apontamento do plano B.
  *
- * A ordem só importa entre operações do MESMO recurso: um `update` depende do
- * `create` anterior e um apontamento depende do plano que o hospeda. Entre
- * recursos diferentes não existe dependência — então um 5xx no plano A não
- * pode impedir o apontamento do plano B de subir, que era exatamente o que
- * acontecia enquanto a fila era um único lote serial.
- *
- * `plan.create` ainda não tem `meta.planId`: ali o id do plano é o próprio id
- * do item (o `local-...` que a tela usa como id provisório).
+ * `plan.create` não tem `meta.planId` — ali o id do plano é o do próprio item.
  */
 export function streamKeyOf(entry: OutboxEntry): string {
   return `plan:${entry.meta.planId ?? entry.id}`;
 }
 
 /**
- * A execução em andamento, quando há uma.
- *
- * Era um booleano `flushing`, e ele não travava nada: só era atribuído depois
- * de um `await`, então duas chamadas simultâneas passavam as duas pela guarda
- * e despachavam a fila em dobro — o mesmo POST indo duas vezes. Acontecia de
- * verdade quando o login com fila pendente coincidia com a sincronização
- * automática.
- *
- * Guardar a promessa resolve os dois lados: a segunda chamada não dispara nada
- * e ainda recebe o resultado real da primeira, em vez de um "ocupado" que não
- * dizia nada a quem perguntou.
+ * Promessa compartilhada: um booleano não serviria, por ser atribuído só
+ * depois do `await` — duas chamadas simultâneas passariam e despachariam a
+ * fila em dobro. Assim a segunda ainda recebe o resultado real da primeira.
  */
 let emAndamento: Promise<FlushResult> | null = null;
 
 /**
- * Envia a fila agrupada por recurso: dentro de um recurso, em ordem de
- * criação; entre recursos, de forma independente.
- *
- * Só duas condições interrompem o lote inteiro, porque valem para qualquer
- * item: perda de rede e sessão inválida. Um problema específico de um recurso
- * bloqueia apenas aquele recurso.
+ * Envia por recurso: em ordem dentro de um, independentes entre si. Só perda
+ * de rede e sessão inválida param o lote inteiro — o resto trava um recurso só.
  */
 export function flushOutbox(): Promise<FlushResult> {
   emAndamento ??= despachar().finally(() => {
@@ -333,16 +289,10 @@ async function despachar(): Promise<FlushResult> {
   }
 
   /*
-   * Agrupa por recurso ANTES de olhar o backoff, e não depois.
-   *
-   * A ordem importava: filtrando primeiro, um item em espera saía da rodada e
-   * os seguintes do mesmo plano subiam sem ele. Um `create` que levou 5xx
-   * ficava para trás enquanto o `update` dele partia para
-   * `/production-plans/local-…`, levava 400 e a edição se perdia.
-   *
-   * Agrupando primeiro, cada recurso despacha apenas o trecho inicial que está
-   * pronto: ao encontrar um item esperando, o grupo inteiro para ali e espera
-   * com ele. Entre recursos diferentes nada muda — eles seguem independentes.
+   * Agrupa ANTES de olhar o backoff. Filtrando primeiro, um item em espera
+   * saía da rodada e os seguintes do mesmo plano subiam sem ele — o `update`
+   * partia para `/production-plans/local-…`, levava 400 e a edição se perdia.
+   * Agora cada recurso despacha só o trecho inicial que está pronto.
    */
   const now = Date.now();
   const grupos = new Map<string, OutboxEntry[]>();
@@ -382,8 +332,7 @@ async function despachar(): Promise<FlushResult> {
 
   streamLoop: for (const ids of streams.values()) {
     for (const id of ids) {
-      // Relê do estado em vez de usar o objeto do agrupamento: um remap de
-      // id local feito nesta mesma rodada pode ter reescrito o `path`.
+      // Relê do estado: um remap nesta mesma rodada pode ter mudado o `path`.
       const entry = entries.find((item) => item.id === id);
       if (!entry || entry.status !== "pending") continue;
 
@@ -400,18 +349,12 @@ async function despachar(): Promise<FlushResult> {
         entry.invalidates.forEach((key) => invalidated.add(key));
         sent += 1;
 
-        /*
-         * Só agora o arquivo pode sair do aparelho.
-         *
-         * Apagá-lo antes do aceite — ao enfileirar, ou ao primeiro envio
-         * sem esperar a resposta — destruiria a única cópia da foto num
-         * item que ainda pode precisar ser reenviado.
-         */
+        // Só depois do aceite: antes disso, é a única cópia de um item que
+        // ainda pode precisar ser reenviado.
         if (entry.upload) discardAttachmentFile(entry.upload.uri);
 
-        // O create devolveu o id real. Quem ficou na fila apontando para o
-        // id local precisa passar a apontar para ele — senão o próximo item
-        // do mesmo plano bate num 404 e o registro se perde.
+        // Quem ficou na fila apontando para o id local passa a apontar para
+        // o real; senão o próximo item bate num 404 e o registro se perde.
         if (entry.kind === "plan.create" || entry.kind === "execution.create") {
           const realId = idFromPayload(result);
           if (realId !== null) remapLocalId(entry.id, realId, invalidated);
@@ -434,28 +377,24 @@ async function despachar(): Promise<FlushResult> {
           }
 
           if (error.status === 409) {
-            // Alteração concorrente: o item era válido, apenas perdeu a
-            // corrida. A versão do servidor vem no corpo e substitui o dado
-            // local; o item fica marcado para o usuário ver o que aconteceu,
-            // em vez de sumir em silêncio.
+            // Perdeu a corrida, mas era válido: a versão do servidor vem no
+            // corpo e substitui a local, e o item fica marcado para o usuário.
             await applyServerVersion(entry, error.payload, invalidated);
             await markError(entry.id, error.message, "conflict");
             conflicted += 1;
-            // Ao contrário de um 4xx comum, aqui o recurso existe e está mais
-            // novo — as operações seguintes do mesmo plano seguem aplicáveis.
+            // Diferente de um 4xx: o recurso existe, então o resto do plano
+            // segue aplicável.
             continue;
           }
 
           if (error.status >= 500) {
-            // Problema do servidor: o item continua válido. Espera e tenta
-            // depois — e só este recurso fica bloqueado.
+            // O item continua válido: espera e tenta depois.
             await markServerFailure(entry.id, error.message);
             blockedStreams += 1;
             continue streamLoop;
           }
 
-          // 4xx: o item é inválido (plano apagado, dado recusado). Marca e
-          // pula o resto deste recurso, cujos itens dependiam dele.
+          // Item inválido: pula o resto do recurso, que dependia dele.
           await markError(entry.id, error.message, "failed");
           failed += 1;
           continue streamLoop;
@@ -482,14 +421,9 @@ async function despachar(): Promise<FlushResult> {
 }
 
 /**
- * Extrai a versão do servidor do corpo do 409 e entrega ao reconciliador para
- * que o dado local seja substituído. O contrato do backend é
- * `ConflictApiError`, que repete o formato de erro da API e acrescenta
- * `current`.
- *
- * Falha ao gravar não derruba o despacho: o item já está marcado como
- * conflito, e as chaves são invalidadas de qualquer forma para que a tela
- * releia da API.
+ * Entrega ao reconciliador a versão que veio no 409 (`ConflictApiError.current`).
+ * Falha ao gravar não derruba o despacho: o item já está marcado, e as chaves
+ * são invalidadas de qualquer forma.
  */
 async function applyServerVersion(
   entry: OutboxEntry,
@@ -560,10 +494,7 @@ function idFromPayload(payload: unknown): string | null {
   return typeof id === "string" && id.length > 0 ? id : null;
 }
 
-/**
- * Troca o id provisório pelo id real em tudo que ficou na fila: caminho da
- * requisição, `meta`, chaves de invalidação e o snapshot exibido na tela.
- */
+/** Troca o id provisório pelo real no caminho, `meta`, chaves e snapshot. */
 function remapLocalId(
   localId: string,
   realId: string,

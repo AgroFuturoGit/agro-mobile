@@ -5,68 +5,36 @@ import * as Location from "expo-location";
 export type Coordinates = {
   latitude: number;
   longitude: number;
-  /**
-   * Raio de erro da leitura, em metros. É o que separa uma posição que localiza
-   * um talhão de uma que só aponta a cidade — por isso vai junto do par, e não
-   * como detalhe opcional.
-   */
+  /** Raio de erro, em metros: separa quem localiza o talhão de quem aponta a cidade. */
   accuracy: number | null;
-  /**
-   * Quando o GPS obteve a posição. Diferente do momento em que o apontamento é
-   * salvo: o registro pode ser preenchido horas depois, em outro lugar.
-   */
+  /** Quando o GPS leu — não quando o apontamento foi salvo, que pode ser horas depois. */
   recordedAt: string;
 };
 
-/**
- * Por que a captura falhou. A tela usa isso para dizer ao usuário o que
- * aconteceu — "sem sinal de GPS" e "permissão negada" pedem reações diferentes.
- */
+/** Por que falhou: "sem sinal" e "permissão negada" pedem reações diferentes. */
 export type LocationFailure = "denied" | "disabled" | "timeout" | "error";
 
 export type LocationResult =
-  | { status: "ok"; coordinates: Coordinates }
-  | { status: LocationFailure };
+  { status: "ok"; coordinates: Coordinates } | { status: LocationFailure };
 
-/**
- * O prazo do GPS depende de quem está esperando.
- *
- * Um aparelho recém-ligado, sob mata fechada ou dentro de um galpão pode levar
- * dezenas de segundos para a primeira leitura — um prazo curto simplesmente
- * desiste antes de o GPS ter chance. Mas prazo longo só é aceitável enquanto
- * ninguém está parado olhando para a tela.
- *
- * Por isso são três, e não um:
+/*
+ * Três prazos, e não um: sob mata fechada a primeira leitura leva dezenas de
+ * segundos, mas prazo longo só cabe enquanto ninguém olha para a tela.
  */
 
-/**
- * Leitura que começa junto com o formulário e corre enquanto o usuário digita
- * quantidade e data. Ninguém espera por ela, então pode ser generosa — é a que
- * dá ao GPS tempo real de encontrar sinal.
- */
+/** Corre em segundo plano enquanto o usuário digita; ninguém espera por ela. */
 export const LOCATION_TIMEOUT_BACKGROUND_MS = 25000;
 
-/**
- * Recaptura pedida pelo botão. O usuário está olhando, mas pediu de propósito e
- * vê o indicador girando; aguentar 15 s é razoável quando se acabou de chegar
- * ao talhão.
- */
+/** Pedida pelo botão: o usuário vê o indicador girando e sabe que pediu. */
 export const LOCATION_TIMEOUT_RECAPTURE_MS = 15000;
 
-/**
- * Última tentativa, no toque em salvar, quando a leitura de abertura não deu em
- * nada. Aqui o usuário quer o registro gravado, não a coordenada — este prazo é
- * curto de propósito.
- */
+/** Última tentativa ao salvar: aqui o usuário quer o registro, não a coordenada. */
 export const LOCATION_TIMEOUT_SUBMIT_MS = 5000;
 
 /**
- * `getCurrentPositionAsync` não aceita prazo: resolve quando conseguir. O limite
- * é imposto aqui, correndo a leitura contra um cronômetro.
- *
- * A leitura perdedora continua em andamento — não há como cancelá-la —, mas seu
- * resultado é descartado. É desperdício de bateria por alguns segundos, não um
- * vazamento: nada fica preso esperando por ela.
+ * `getCurrentPositionAsync` não aceita prazo, então ele é imposto por corrida.
+ * A leitura perdedora segue até o fim e é descartada — gasta bateria por
+ * segundos, mas nada fica preso esperando por ela.
  */
 function comPrazo<T>(
   promessa: Promise<T>,
@@ -88,17 +56,14 @@ function comPrazo<T>(
 }
 
 /**
- * Pede a posição atual, desistindo depois de `prazoMs`.
- *
- * Nunca lança: toda falha vira um `status`, porque quem chama precisa seguir
- * salvando o apontamento de qualquer forma.
+ * Posição atual, desistindo depois de `prazoMs`. Nunca lança: toda falha vira
+ * `status`, porque o apontamento precisa ser salvo de qualquer forma.
  */
 export async function captureCoordinates(
   prazoMs: number = LOCATION_TIMEOUT_BACKGROUND_MS,
 ): Promise<LocationResult> {
   try {
-    // A permissão é pedida aqui, no ato de salvar, e não no boot do app: o
-    // usuário entende melhor o pedido quando ele acontece junto da ação.
+    // Pedida junto da ação, não no boot: assim o pedido faz sentido.
     const permissao = await Location.requestForegroundPermissionsAsync();
     if (!permissao.granted) return { status: "denied" };
 
@@ -151,12 +116,9 @@ export function formatCoordinates(coordinates: Coordinates): string {
 }
 
 /**
- * A posição foi capturada num dia diferente do da colheita?
- *
- * O app captura onde o telefone está no momento de salvar, mas a data da
- * colheita é escolhida pelo usuário e pode ser retroativa. Quem colhe de manhã
- * e registra à noite, em casa, grava a coordenada da casa — e nada no dado
- * denuncia isso. Comparar as duas datas é o que permite avisar.
+ * A data da colheita é escolhida pelo usuário e pode ser retroativa, mas a
+ * coordenada é sempre a de agora. Quem colhe de manhã e registra à noite grava
+ * a casa, e nada no dado denuncia — comparar as datas é o que permite avisar.
  */
 export function isLocationFromAnotherDay(
   recordedAt: string,
@@ -169,15 +131,9 @@ export function isLocationFromAnotherDay(
 }
 
 /**
- * Abre a posição no aplicativo de mapas do aparelho.
- *
- * Deliberadamente não embute um mapa: o app é offline-first, e tiles de mapa
- * exigem rede — justamente o que falta em campo. Delegar ao aplicativo instalado
- * aproveita as regiões que o usuário já tenha baixado, e não custa dependência
- * nova, chave de API nem rebuild.
- *
- * Os esquemas `geo:` e `maps:` são específicos de cada plataforma; o endereço
- * web cobre o caso de nenhum dos dois ser atendido.
+ * Abre no app de mapas do aparelho, que já pode ter regiões baixadas — e não
+ * custa dependência, chave de API nem rebuild. `geo:` e `maps:` são por
+ * plataforma; o endereço web cobre o caso de nenhum ser atendido.
  */
 export async function openInMaps(
   coordinates: Coordinates,
